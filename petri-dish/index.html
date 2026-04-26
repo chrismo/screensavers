@@ -84,8 +84,10 @@
     }
 
     .row {
-      display: flex;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: 1fr 3.4rem 1fr;
+      align-items: center;
+      gap: 0.5rem;
       padding: 0.3rem 0;
       border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
@@ -94,14 +96,42 @@
     .row .val {
       color: #fff;
       font-variant-numeric: tabular-nums;
+      text-align: right;
     }
     .row .val.accent { color: #9cf; }
+    .row .keys { justify-self: center; }
+    .row.wide { grid-template-columns: 1fr auto; }
 
     .legend {
       display: grid;
       grid-template-columns: auto 1fr;
       gap: 0.45rem 0.85rem;
       align-items: center;
+    }
+
+    .preset-pills {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.18rem;
+      padding: 0.15rem 0 0.3rem;
+    }
+    .preset-pills .pill {
+      font-family: inherit;
+      font-size: 10.5px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #555;
+      padding: 0.12rem 0.34rem;
+      border-radius: 3px;
+      min-width: 0.5rem;
+      text-align: center;
+    }
+    .preset-pills .pill.active {
+      background: rgba(156, 204, 255, 0.22);
+      color: #9cf;
+    }
+    .preset-pills .pill.target {
+      background: rgba(156, 204, 255, 0.45);
+      color: #fff;
     }
     .kbd {
       font-family: inherit;
@@ -126,25 +156,22 @@
       <h1>Slime Molds <small>Physarum</small></h1>
 
       <h2>state</h2>
-      <div class="row"><span class="label">rotAngle</span><span id="v-rotAngle" class="val"></span></div>
-      <div class="row"><span class="label">sensorAngle</span><span id="v-sensorAngle" class="val"></span></div>
-      <div class="row"><span class="label">sensorDist</span><span id="v-sensorDist" class="val"></span></div>
-      <div class="row"><span class="label">moldSpeed</span><span id="v-moldSpeed" class="val"></span></div>
-      <div class="row"><span class="label">bgFade</span><span id="v-bgFade" class="val"></span></div>
+      <div class="row"><span class="label">rotAngle</span><span class="kbd keys">← →</span><span id="v-rotAngle" class="val"></span></div>
+      <div class="row"><span class="label">sensorAngle</span><span class="kbd keys">↑ ↓</span><span id="v-sensorAngle" class="val"></span></div>
+      <div class="row"><span class="label">sensorDist</span><span class="kbd keys">[ ]</span><span id="v-sensorDist" class="val"></span></div>
+      <div class="row"><span class="label">moldSpeed</span><span class="kbd keys">- =</span><span id="v-moldSpeed" class="val"></span></div>
+      <div class="row"><span class="label">bgFade</span><span class="kbd keys">, .</span><span id="v-bgFade" class="val"></span></div>
 
       <h2>mode</h2>
-      <div class="row"><span class="label">mode</span><span id="v-mode" class="val accent"></span></div>
-      <div class="row"><span class="label">preset</span><span id="v-preset" class="val accent"></span></div>
+      <div class="row wide"><span class="label">mode</span><span id="v-mode" class="val accent"></span></div>
+      <div class="row wide"><span class="label">preset</span><span id="v-preset" class="val accent"></span></div>
+      <div id="v-preset-pills" class="preset-pills"></div>
 
       <h2>keys</h2>
       <div class="legend">
-        <div class="kbd">← →</div><div class="kbd-desc">rotAngle ±5°</div>
-        <div class="kbd">↑ ↓</div><div class="kbd-desc">sensorAngle ±5°</div>
-        <div class="kbd">[ ]</div><div class="kbd-desc">sensorDist ±1px</div>
-        <div class="kbd">- =</div><div class="kbd-desc">moldSpeed ±0.5</div>
-        <div class="kbd">0–9</div><div class="kbd-desc">presets</div>
         <div class="kbd">D</div><div class="kbd-desc">drift (perlin)</div>
         <div class="kbd">L</div><div class="kbd-desc">lerp (preset cycle)</div>
+        <div class="kbd">R</div><div class="kbd-desc">reset molds</div>
         <div class="kbd">H</div><div class="kbd-desc">hide / show panel</div>
       </div>
     </div>

@@ -22,22 +22,23 @@ let bgFade = 5;
 const angleStep = 5;
 const distStep = 1;
 const speedStep = 0.5;
+const fadeStep = 1;
 
 // --- presets ---------------------------------------------------------------
 // 0-9 each snapshot the full live config. Tuned to span the regimes
 // discovered while playing: thin parallel highways, tight cells, sweeping
 // long-range networks, the chaotic-but-organized "tipping point" at 2px, etc.
 const presets = [
-  { name: 'Default',       rotAngle: 45, sensorAngle: 45, sensorDist: 10, moldSpeed: 1.0, bgFade:  5 },
+  { name: 'Slime',         rotAngle: 45, sensorAngle: 45, sensorDist: 10, moldSpeed: 1.0, bgFade:  5 },
   { name: 'Cobweb',        rotAngle: 20, sensorAngle: 20, sensorDist: 20, moldSpeed: 1.0, bgFade:  5 },
   { name: 'Honeycomb',     rotAngle: 60, sensorAngle: 60, sensorDist:  8, moldSpeed: 1.0, bgFade:  5 },
   { name: 'Highways',      rotAngle: 30, sensorAngle: 30, sensorDist: 30, moldSpeed: 2.0, bgFade:  5 },
   { name: 'Plasma',        rotAngle: 85, sensorAngle: 85, sensorDist: 15, moldSpeed: 2.5, bgFade:  8 },
-  { name: 'Whisper',       rotAngle: 15, sensorAngle: 15, sensorDist: 12, moldSpeed: 1.5, bgFade: 15 },
-  { name: 'Mycelium',      rotAngle: 40, sensorAngle: 50, sensorDist: 12, moldSpeed: 1.0, bgFade:  4 },
-  { name: 'Ooze',          rotAngle: 70, sensorAngle: 40, sensorDist:  6, moldSpeed: 0.5, bgFade:  4 },
-  { name: 'Tipping Point', rotAngle: 45, sensorAngle: 45, sensorDist:  2, moldSpeed: 1.0, bgFade:  5 },
-  { name: 'Galactic',      rotAngle: 15, sensorAngle: 25, sensorDist: 25, moldSpeed: 2.0, bgFade: 10 },
+  { name: 'Dendrite',      rotAngle: 80, sensorAngle: 35, sensorDist: 18, moldSpeed: 1.0, bgFade:  1 },
+  { name: 'Tube',          rotAngle: 12, sensorAngle: 95, sensorDist: 60, moldSpeed: 2.0, bgFade:  2 },
+  { name: 'Ooze',          rotAngle: 70, sensorAngle: 40, sensorDist:  6, moldSpeed: 0.5, bgFade:  2 },
+  { name: 'Vermicelli',    rotAngle: 45, sensorAngle: 45, sensorDist:  2, moldSpeed: 1.0, bgFade:  5 },
+  { name: 'Burlap',        rotAngle:  5, sensorAngle:  5, sensorDist:  4, moldSpeed: 0.6, bgFade:  1 },
 ];
 let presetIdx = 0;
 
@@ -167,7 +168,12 @@ function keyPressed() {
   } else if (key === '-') {
     moldSpeed = max(0.1, moldSpeed - speedStep);
   } else if (key === '=') {
-    moldSpeed += speedStep;
+    // Snap back to grid when bumping up from the sub-step floor (0.1).
+    moldSpeed = moldSpeed < speedStep ? speedStep : moldSpeed + speedStep;
+  } else if (key === ',') {
+    bgFade = max(1, bgFade - fadeStep);
+  } else if (key === '.') {
+    bgFade += fadeStep;
   } else if (key === 'd' || key === 'D') {
     drift = !drift;
     if (drift) lerpMode = false;
@@ -179,6 +185,9 @@ function keyPressed() {
       lerpTo = (presetIdx + 1) % presets.length;
       lerpT = 0;
     }
+  } else if (key === 'r' || key === 'R') {
+    for (let i = 0; i < num; i++) molds[i] = new Mold();
+    background(0);
   } else if (key === 'h' || key === 'H') {
     toggleDrawer();
   } else if (key >= '0' && key <= '9') {
@@ -204,6 +213,14 @@ function setupDom() {
   dom.bgFade      = document.getElementById('v-bgFade');
   dom.mode        = document.getElementById('v-mode');
   dom.preset      = document.getElementById('v-preset');
+  dom.presetPills = document.getElementById('v-preset-pills');
+
+  for (let i = 0; i < presets.length; i++) {
+    const pill = document.createElement('span');
+    pill.className = 'pill';
+    pill.textContent = i;
+    dom.presetPills.appendChild(pill);
+  }
 
   const toggle = document.getElementById('drawer-toggle');
   toggle.addEventListener('click', () => {
@@ -231,4 +248,12 @@ function updateDom() {
   dom.preset.textContent = lerpMode
     ? `${presets[lerpFrom].name} → ${presets[lerpTo].name}`
     : presets[presetIdx].name;
+
+  const activeIdx = lerpMode ? lerpFrom : presetIdx;
+  const targetIdx = lerpMode ? lerpTo : -1;
+  for (let i = 0; i < dom.presetPills.children.length; i++) {
+    const p = dom.presetPills.children[i];
+    p.classList.toggle('active', i === activeIdx);
+    p.classList.toggle('target', i === targetIdx);
+  }
 }
