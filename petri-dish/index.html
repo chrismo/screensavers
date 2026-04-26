@@ -85,7 +85,7 @@
 
     .row {
       display: grid;
-      grid-template-columns: 1fr 3.4rem 1fr;
+      grid-template-columns: 5.5rem 5.2rem 1fr;
       align-items: center;
       gap: 0.5rem;
       padding: 0.3rem 0;
@@ -99,7 +99,20 @@
       text-align: right;
     }
     .row .val.accent { color: #9cf; }
-    .row .keys { justify-self: center; }
+    .row .keys {
+      justify-self: center;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+    }
+    .row .key-hint {
+      font-size: 10px;
+      color: #5b5b5b;
+      letter-spacing: 0.05em;
+      line-height: 1;
+      white-space: nowrap;
+    }
     .row.wide { grid-template-columns: 1fr auto; }
 
     .legend {
@@ -136,16 +149,60 @@
     .kbd {
       font-family: inherit;
       background: rgba(255, 255, 255, 0.07);
-      padding: 0.18rem 0.45rem;
+      padding: 0.35rem 0.6rem;
       border-radius: 3px;
-      font-size: 11px;
+      font-size: 12px;
       color: #ccc;
       text-align: center;
       white-space: nowrap;
+      line-height: 1;
     }
     .kbd-desc {
       color: #aaa;
       font-size: 11px;
+    }
+
+    /* Buttons used as tap-targets share kbd visuals + standard reset. */
+    button.kbd, .kbd-pair .kbd-btn, .preset-pills .pill {
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button.kbd:focus, .kbd-pair .kbd-btn:focus, .preset-pills .pill:focus {
+      outline: none;
+    }
+    button.kbd:hover, .kbd-pair .kbd-btn:hover {
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff;
+    }
+    button.kbd:active, .kbd-pair .kbd-btn:active, .preset-pills .pill:active {
+      background: rgba(156, 204, 255, 0.32);
+      color: #9cf;
+    }
+
+    .kbd-pair {
+      display: inline-flex;
+      background: rgba(255, 255, 255, 0.07);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .kbd-pair .kbd-btn {
+      background: none;
+      color: #ccc;
+      font-size: 13px;
+      padding: 0.4rem 0.5rem;
+      line-height: 1;
+      min-width: 1.2rem;
+    }
+    .kbd-pair .kbd-btn + .kbd-btn {
+      border-left: 1px solid rgba(0, 0, 0, 0.35);
+    }
+
+    .preset-pills .pill {
+      padding: 0.28rem 0.42rem;
+      font-size: 11.5px;
+      min-width: 1rem;
     }
   </style>
 </head>
@@ -156,23 +213,23 @@
       <h1>Petri Dish <small>Physarum</small></h1>
 
       <h2>state</h2>
-      <div class="row"><span class="label">rotAngle</span><span class="kbd keys">← →</span><span id="v-rotAngle" class="val"></span></div>
-      <div class="row"><span class="label">sensorAngle</span><span class="kbd keys">↑ ↓</span><span id="v-sensorAngle" class="val"></span></div>
-      <div class="row"><span class="label">sensorDist</span><span class="kbd keys">[ ]</span><span id="v-sensorDist" class="val"></span></div>
-      <div class="row"><span class="label">moldSpeed</span><span class="kbd keys">- =</span><span id="v-moldSpeed" class="val"></span></div>
-      <div class="row"><span class="label">bgFade</span><span class="kbd keys">, .</span><span id="v-bgFade" class="val"></span></div>
+      <div class="row"><span class="label">rotAngle</span><div class="keys"><span class="kbd-pair"><button class="kbd-btn" data-action="adjust" data-param="rotAngle" data-dir="-1">−</button><button class="kbd-btn" data-action="adjust" data-param="rotAngle" data-dir="1">+</button></span><span class="key-hint">← →</span></div><span id="v-rotAngle" class="val"></span></div>
+      <div class="row"><span class="label">sensorAngle</span><div class="keys"><span class="kbd-pair"><button class="kbd-btn" data-action="adjust" data-param="sensorAngle" data-dir="-1">−</button><button class="kbd-btn" data-action="adjust" data-param="sensorAngle" data-dir="1">+</button></span><span class="key-hint">↓ ↑</span></div><span id="v-sensorAngle" class="val"></span></div>
+      <div class="row"><span class="label">sensorDist</span><div class="keys"><span class="kbd-pair"><button class="kbd-btn" data-action="adjust" data-param="sensorDist" data-dir="-1">−</button><button class="kbd-btn" data-action="adjust" data-param="sensorDist" data-dir="1">+</button></span><span class="key-hint">[ ]</span></div><span id="v-sensorDist" class="val"></span></div>
+      <div class="row"><span class="label">moldSpeed</span><div class="keys"><span class="kbd-pair"><button class="kbd-btn" data-action="adjust" data-param="moldSpeed" data-dir="-1">−</button><button class="kbd-btn" data-action="adjust" data-param="moldSpeed" data-dir="1">+</button></span><span class="key-hint">- =</span></div><span id="v-moldSpeed" class="val"></span></div>
+      <div class="row"><span class="label">bgFade</span><div class="keys"><span class="kbd-pair"><button class="kbd-btn" data-action="adjust" data-param="bgFade" data-dir="-1">−</button><button class="kbd-btn" data-action="adjust" data-param="bgFade" data-dir="1">+</button></span><span class="key-hint">, .</span></div><span id="v-bgFade" class="val"></span></div>
 
       <h2>mode</h2>
       <div class="row wide"><span class="label">mode</span><span id="v-mode" class="val accent"></span></div>
       <div class="row wide"><span class="label">preset</span><span id="v-preset" class="val accent"></span></div>
       <div id="v-preset-pills" class="preset-pills"></div>
 
-      <h2>keys</h2>
+      <h2>actions</h2>
       <div class="legend">
-        <div class="kbd">D</div><div class="kbd-desc">drift (perlin)</div>
-        <div class="kbd">L</div><div class="kbd-desc">lerp (preset cycle)</div>
-        <div class="kbd">R</div><div class="kbd-desc">reset molds</div>
-        <div class="kbd">H</div><div class="kbd-desc">hide / show panel</div>
+        <button class="kbd kbd-action" data-action="drift" title="D">D</button><div class="kbd-desc">drift (perlin)</div>
+        <button class="kbd kbd-action" data-action="lerp" title="L">L</button><div class="kbd-desc">lerp (preset cycle)</div>
+        <button class="kbd kbd-action" data-action="reset" title="R">R</button><div class="kbd-desc">reset molds</div>
+        <button class="kbd kbd-action" data-action="hide" title="H">H</button><div class="kbd-desc">hide / show panel</div>
       </div>
     </div>
   </div>

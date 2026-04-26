@@ -1,12 +1,18 @@
 /*
------ Coding Tutorial by Patt Vira -----
-Name: Slime Molds (Physarum)
-Video Tutorial: https://youtu.be/VyXxSNcgDtg
+Petri Dish — interactive Physarum playground
 
-References:
-1. Algorithm by Jeff Jones: https://uwe-repository.worktribe.com/output/980579/characteristics-of-pattern-formation-and-evolution-in-approximations-of-physarum-transport-networks
+Forked by chrismo, co-authored with Claude (Anthropic).
 
-Original sketch: https://openprocessing.org/sketch/2924168
+Forked from Patt Vira's "Slime Molds (Physarum)" tutorial:
+  Original sketch: https://openprocessing.org/sketch/2213463
+  Video tutorial:  https://youtu.be/VyXxSNcgDtg
+
+Algorithm: Jeff Jones (2010), "Characteristics of Pattern Formation and
+Evolution in Approximations of Physarum Transport Networks"
+  https://uwe-repository.worktribe.com/output/980579
+
+Adds: keyboard + tap controls, 10 named presets, perlin auto-drift mode,
+preset-cycle lerp, mold reset, "commit"-based brightness shading.
 */
 
 let molds = [];
@@ -159,55 +165,63 @@ function applyLerp(a, b, t) {
   bgFade      = lerp(a.bgFade,      b.bgFade,      ease);
 }
 
-function keyPressed() {
-  if (keyCode === LEFT_ARROW) {
-    rotAngle -= angleStep;
-  } else if (keyCode === RIGHT_ARROW) {
-    rotAngle += angleStep;
-  } else if (keyCode === UP_ARROW) {
-    sensorAngle += angleStep;
-  } else if (keyCode === DOWN_ARROW) {
-    sensorAngle -= angleStep;
-  } else if (key === '[') {
-    sensorDist = max(1, sensorDist - distStep);
-  } else if (key === ']') {
-    sensorDist += distStep;
-  } else if (key === '-') {
-    moldSpeed = max(0.1, moldSpeed - speedStep);
-  } else if (key === '=') {
-    // Snap back to grid when bumping up from the sub-step floor (0.1).
-    moldSpeed = moldSpeed < speedStep ? speedStep : moldSpeed + speedStep;
-  } else if (key === ',') {
-    bgFade = max(1, bgFade - fadeStep);
-  } else if (key === '.') {
-    bgFade += fadeStep;
-  } else if (key === 'd' || key === 'D') {
-    drift = !drift;
-    if (drift) lerpMode = false;
-  } else if (key === 'l' || key === 'L') {
-    lerpMode = !lerpMode;
-    if (lerpMode) {
-      drift = false;
-      lerpFrom = presetIdx;
-      lerpTo = (presetIdx + 1) % presets.length;
-      lerpT = 0;
-    }
-  } else if (key === 'r' || key === 'R') {
-    for (let i = 0; i < num; i++) molds[i] = new Mold();
-    background(0);
-  } else if (key === 'h' || key === 'H') {
-    toggleDrawer();
-  } else if (key >= '0' && key <= '9') {
-    const i = Number(key);
-    applyPreset(i);
-    if (lerpMode) {
-      lerpFrom = i;
-      lerpTo = (i + 1) % presets.length;
-      lerpT = 0;
-    }
-  } else {
-    return;
+// --- action handlers (shared by keyboard and tap UI) ----------------------
+function adjustParam(name, dir) {
+  if (name === 'rotAngle')         rotAngle    += dir * angleStep;
+  else if (name === 'sensorAngle') sensorAngle += dir * angleStep;
+  else if (name === 'sensorDist')  sensorDist   = dir < 0 ? max(1, sensorDist - distStep) : sensorDist + distStep;
+  else if (name === 'moldSpeed')   moldSpeed    = dir < 0
+    ? max(0.1, moldSpeed - speedStep)
+    : (moldSpeed < speedStep ? speedStep : moldSpeed + speedStep); // snap to grid from 0.1 floor
+  else if (name === 'bgFade')      bgFade       = dir < 0 ? max(1, bgFade - fadeStep) : bgFade + fadeStep;
+}
+
+function toggleDrift() {
+  drift = !drift;
+  if (drift) lerpMode = false;
+}
+
+function toggleLerp() {
+  lerpMode = !lerpMode;
+  if (lerpMode) {
+    drift = false;
+    lerpFrom = presetIdx;
+    lerpTo = (presetIdx + 1) % presets.length;
+    lerpT = 0;
   }
+}
+
+function resetMolds() {
+  for (let i = 0; i < num; i++) molds[i] = new Mold();
+  background(0);
+}
+
+function pickPreset(i) {
+  applyPreset(i);
+  if (lerpMode) {
+    lerpFrom = i;
+    lerpTo = (i + 1) % presets.length;
+    lerpT = 0;
+  }
+}
+
+function keyPressed() {
+  if      (keyCode === LEFT_ARROW)  adjustParam('rotAngle', -1);
+  else if (keyCode === RIGHT_ARROW) adjustParam('rotAngle', +1);
+  else if (keyCode === UP_ARROW)    adjustParam('sensorAngle', +1);
+  else if (keyCode === DOWN_ARROW)  adjustParam('sensorAngle', -1);
+  else if (key === '[')             adjustParam('sensorDist', -1);
+  else if (key === ']')             adjustParam('sensorDist', +1);
+  else if (key === '-')             adjustParam('moldSpeed', -1);
+  else if (key === '=')             adjustParam('moldSpeed', +1);
+  else if (key === ',')             adjustParam('bgFade', -1);
+  else if (key === '.')             adjustParam('bgFade', +1);
+  else if (key === 'd' || key === 'D') toggleDrift();
+  else if (key === 'l' || key === 'L') toggleLerp();
+  else if (key === 'r' || key === 'R') resetMolds();
+  else if (key === 'h' || key === 'H') toggleDrawer();
+  else if (key >= '0' && key <= '9')   pickPreset(Number(key));
+  else return;
   return false;
 }
 
@@ -226,9 +240,10 @@ function setupDom() {
   dom.presetPills = document.getElementById('v-preset-pills');
 
   for (let i = 0; i < presets.length; i++) {
-    const pill = document.createElement('span');
+    const pill = document.createElement('button');
     pill.className = 'pill';
     pill.textContent = i;
+    pill.addEventListener('click', () => { pickPreset(i); pill.blur(); });
     dom.presetPills.appendChild(pill);
   }
 
@@ -236,6 +251,21 @@ function setupDom() {
   toggle.addEventListener('click', () => {
     toggleDrawer();
     toggle.blur();
+  });
+
+  // Delegated click dispatch for tap UI: every actionable control carries
+  // data-action. Keeps the JS in one place and keeps the keyboard +
+  // tap paths sharing the same handlers.
+  document.getElementById('drawer-content').addEventListener('click', (e) => {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const a = el.dataset.action;
+    if (a === 'adjust') adjustParam(el.dataset.param, Number(el.dataset.dir));
+    else if (a === 'drift') toggleDrift();
+    else if (a === 'lerp')  toggleLerp();
+    else if (a === 'reset') resetMolds();
+    else if (a === 'hide')  toggleDrawer();
+    el.blur();
   });
 }
 
