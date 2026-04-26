@@ -72,6 +72,7 @@ const dom = {};
 function setup() {
   createCanvas(windowWidth, windowHeight);
   angleMode(DEGREES);
+  colorMode(HSB, 360, 100, 100, 255);
   d = pixelDensity();
 
   for (let i = 0; i < num; i++) {
