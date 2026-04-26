@@ -67,7 +67,11 @@ let lerpT = 0;
 const lerpDuration = 480; // frames per transition (~8s @ 60fps)
 
 // --- DOM panel handles ----------------------------------------------------
+// The drawer/panel lives in index.html locally, but isn't present when this
+// sketch is pasted into OpenProcessing. setupDom() detects that and skips,
+// and the sketch runs panel-less.
 const dom = {};
+let hasPanel = false;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -209,7 +213,10 @@ function keyPressed() {
 
 // --- DOM panel ------------------------------------------------------------
 function setupDom() {
-  dom.rotAngle    = document.getElementById('v-rotAngle');
+  dom.rotAngle = document.getElementById('v-rotAngle');
+  if (!dom.rotAngle) return; // No panel markup (e.g. on OpenProcessing).
+  hasPanel = true;
+
   dom.sensorAngle = document.getElementById('v-sensorAngle');
   dom.sensorDist  = document.getElementById('v-sensorDist');
   dom.moldSpeed   = document.getElementById('v-moldSpeed');
@@ -233,10 +240,12 @@ function setupDom() {
 }
 
 function toggleDrawer() {
+  if (!hasPanel) return;
   document.getElementById('drawer').classList.toggle('open');
 }
 
 function updateDom() {
+  if (!hasPanel) return;
   dom.rotAngle.textContent    = `${nf(rotAngle, 1, 1)}°`;
   dom.sensorAngle.textContent = `${nf(sensorAngle, 1, 1)}°`;
   dom.sensorDist.textContent  = `${nf(sensorDist, 1, 1)}px`;
@@ -258,5 +267,97 @@ function updateDom() {
     const p = dom.presetPills.children[i];
     p.classList.toggle('active', i === activeIdx);
     p.classList.toggle('target', i === targetIdx);
+  }
+}
+
+// --- Mold class -----------------------------------------------------------
+// Brightness "commit" model: each mold tracks a smoothed [0..1] indicator
+// of whether it's currently committing to its heading (going straight) or
+// turning to chase a brighter trail. Brightness on the trail map maps from
+// this — committed runs draw bright, turning molds draw dim.
+//
+// IMPORTANT: this isn't purely cosmetic. The trail map is what sensors read
+// the next frame, so dim trails in turning zones make those zones less
+// attractive to other molds, adding positive feedback toward established
+// flow channels. Patterns become more channelized than the unweighted
+// (constant-brightness) version.
+const COMMIT_SMOOTH = 0.08;     // EMA pull-rate per frame; ~8-frame half-life
+const BRIGHTNESS_MIN = 30;      // brightness when fully turning
+const BRIGHTNESS_MAX = 100;     // brightness when fully committed
+
+class Mold {
+  constructor() {
+    this.x = random(width / 2 - 20, width / 2 + 20);
+    this.y = random(height / 2 - 20, height / 2 + 20);
+    this.r = 0.5;
+
+    this.heading = random(360);
+    this.vx = cos(this.heading);
+    this.vy = sin(this.heading);
+
+    this.rSensorPos = createVector(0, 0);
+    this.lSensorPos = createVector(0, 0);
+    this.fSensorPos = createVector(0, 0);
+
+    this.commit = 1;
+  }
+
+  update() {
+    this.vx = cos(this.heading);
+    this.vy = sin(this.heading);
+
+    this.x = (this.x + this.vx * moldSpeed + width) % width;
+    this.y = (this.y + this.vy * moldSpeed + height) % height;
+
+    this.getSensorPos(this.rSensorPos, this.heading + sensorAngle);
+    this.getSensorPos(this.lSensorPos, this.heading - sensorAngle);
+    this.getSensorPos(this.fSensorPos, this.heading);
+
+    let index, l, r, f;
+    index = 4 * (d * floor(this.rSensorPos.y)) * (d * width) + 4 * (d * floor(this.rSensorPos.x));
+    r = pixels[index] + pixels[index + 1] + pixels[index + 2];
+
+    index = 4 * (d * floor(this.lSensorPos.y)) * (d * width) + 4 * (d * floor(this.lSensorPos.x));
+    l = pixels[index] + pixels[index + 1] + pixels[index + 2];
+
+    index = 4 * (d * floor(this.fSensorPos.y)) * (d * width) + 4 * (d * floor(this.fSensorPos.x));
+    f = pixels[index] + pixels[index + 1] + pixels[index + 2];
+
+    let turning = true;
+    if (f > l && f > r) {
+      this.heading += 0;
+      turning = false;
+    } else if (f < l && f < r) {
+      if (random(1) < 0.5) {
+        this.heading += rotAngle;
+      } else {
+        this.heading -= rotAngle;
+      }
+    } else if (l > r) {
+      this.heading += -rotAngle;
+    } else if (r > l) {
+      this.heading += rotAngle;
+    }
+    this.updateCommit(turning);
+  }
+
+  display() {
+    noStroke();
+    fill(0, 0, this.brightness());
+    ellipse(this.x, this.y, this.r * 2, this.r * 2);
+  }
+
+  updateCommit(turning) {
+    const target = turning ? 0 : 1;
+    this.commit = this.commit * (1 - COMMIT_SMOOTH) + target * COMMIT_SMOOTH;
+  }
+
+  brightness() {
+    return BRIGHTNESS_MIN + this.commit * (BRIGHTNESS_MAX - BRIGHTNESS_MIN);
+  }
+
+  getSensorPos(sensor, angle) {
+    sensor.x = (this.x + sensorDist * cos(angle) + width) % width;
+    sensor.y = (this.y + sensorDist * sin(angle) + height) % height;
   }
 }
