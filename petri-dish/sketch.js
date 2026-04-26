@@ -51,11 +51,12 @@ const driftRanges = {
   sensorAngle: { min: 5,   max: 90, offset: 100 },
   sensorDist:  { min: 2,   max: 30, offset: 200 },
   moldSpeed:   { min: 0.5, max: 3,  offset: 300 },
+  bgFade:      { min: 1,   max: 15, offset: 400 },
 };
 // Per-param bias added on top of drift output. Set when a preset is pressed
 // while drift is on, then decays toward 0 so drift returns to its natural
 // sweep. ~5s to fade at 60fps with decay 0.99.
-const driftBias = { rotAngle: 0, sensorAngle: 0, sensorDist: 0, moldSpeed: 0 };
+const driftBias = { rotAngle: 0, sensorAngle: 0, sensorDist: 0, moldSpeed: 0, bgFade: 0 };
 const driftBiasDecay = 0.99;
 
 // --- lerp (cycle through presets) -----------------------------------------
@@ -91,6 +92,7 @@ function draw() {
     sensorAngle = driftValue('sensorAngle') + driftBias.sensorAngle;
     sensorDist  = driftValue('sensorDist')  + driftBias.sensorDist;
     moldSpeed   = driftValue('moldSpeed')   + driftBias.moldSpeed;
+    bgFade      = driftValue('bgFade')      + driftBias.bgFade;
     for (const k in driftBias) driftBias[k] *= driftBiasDecay;
   } else if (lerpMode) {
     lerpT += 1 / lerpDuration;
@@ -132,7 +134,7 @@ function applyPreset(i) {
     driftBias.sensorAngle = p.sensorAngle - driftValue('sensorAngle');
     driftBias.sensorDist  = p.sensorDist  - driftValue('sensorDist');
     driftBias.moldSpeed   = p.moldSpeed   - driftValue('moldSpeed');
-    bgFade = p.bgFade;
+    driftBias.bgFade      = p.bgFade      - driftValue('bgFade');
   } else {
     rotAngle    = p.rotAngle;
     sensorAngle = p.sensorAngle;
