@@ -23,6 +23,7 @@ on the left edge to open the drawer.
 | `D`       | toggle drift mode (perlin auto-morph) |
 | `L`       | toggle lerp mode (cycle through presets) |
 | `R`       | reset molds (re-seed at center, clear canvas) |
+| `C`       | copy a screensaver URL that reproduces the current state |
 | `H`       | show/hide control drawer            |
 
 `lerpDuration` and `driftSpeed` are panel-only (no key binding).
@@ -35,9 +36,10 @@ on the left edge to open the drawer.
 
 ## URL params
 
-Applied in order: preset → numeric overrides → mode → panel.
-[The landing page builder](https://chrismo.github.io/screensavers/) is
-the easy way to construct one.
+Applied in order: preset → numeric overrides → mode → panel. The
+easiest way to get one is to open the sketch, tune the panel, and
+press `C` — it copies a URL that reproduces the current state. The
+table below is for hand-rolling.
 
 | param            | effect                                              |
 | ---------------- | --------------------------------------------------- |

@@ -7,244 +7,40 @@
   <style>
     html, body { margin: 0; background: #111; color: #ddd;
       font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
-    body { max-width: 38rem; padding: 3rem 1.5rem; margin: 0 auto;
+    body { max-width: 36rem; padding: 3rem 1.5rem; margin: 0 auto;
       font-size: 14px; line-height: 1.6; }
     h1 { font-size: 16px; font-weight: 500; letter-spacing: 0.04em;
-      margin: 0 0 0.5rem; color: #fff; }
-    h2 { font-size: 11px; font-weight: 500; letter-spacing: 0.12em;
-      text-transform: uppercase; color: #888;
-      margin: 2.4rem 0 0.6rem; }
+      margin: 0 0 1.4rem; color: #fff; }
     a { color: #9cf; text-decoration: none; }
     a:hover { color: #fff; }
     p { margin: 0.5rem 0; }
-    ul { list-style: none; padding: 0; margin: 0.4rem 0; }
-    .sketches li { padding: 0.4rem 0;
+    ul { list-style: none; padding: 0; }
+    li { padding: 0.4rem 0;
       border-bottom: 1px solid rgba(255,255,255,0.06); }
     .muted { color: #777; font-size: 12px; }
-
-    .builder { display: grid; grid-template-columns: 6rem 1fr;
-      gap: 0.5rem 0.85rem; align-items: center; margin: 0.6rem 0; }
-    .builder > label { color: #888; font-size: 12px; }
-    .builder select {
-      font-family: inherit; font-size: 13px;
-      background: rgba(255,255,255,0.05); color: #ddd;
-      border: 1px solid rgba(255,255,255,0.08); border-radius: 3px;
-      padding: 0.3rem 0.45rem; }
-    .builder select:focus { outline: 1px solid #9cf; }
-    .builder .check-row { display: flex; align-items: center; gap: 0.45rem; }
-    .builder .check-row label { color: #ddd; font-size: 13px; cursor: pointer; }
-    .builder input[type="number"] {
-      font-family: inherit; font-size: 13px;
-      background: rgba(255,255,255,0.05); color: #ddd;
-      border: 1px solid rgba(255,255,255,0.08); border-radius: 3px;
-      padding: 0.3rem 0.45rem; width: 7rem; }
-    .builder input[type="number"]:focus { outline: 1px solid #9cf; }
-
-    details.tweaks { margin-top: 0.6rem; }
-    details.tweaks > summary {
-      cursor: pointer; font-size: 12px; color: #888;
-      list-style: none; padding: 0.3rem 0;
-      letter-spacing: 0.04em; }
-    details.tweaks > summary::-webkit-details-marker { display: none; }
-    details.tweaks > summary::before { content: '▸ '; color: #555; }
-    details.tweaks[open] > summary::before { content: '▾ '; }
-    details.tweaks > .builder { margin-top: 0.4rem; }
-    details.tweaks > .hint { color: #555; font-size: 11px;
-      margin: 0.2rem 0 0.5rem; padding-left: 1rem; }
-
-    .url-box { margin: 0.8rem 0 0.5rem;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.06); border-radius: 3px;
-      padding: 0.7rem 0.85rem; font-size: 12.5px; color: #9cf;
-      word-break: break-all; }
-    .actions { display: flex; gap: 0.5rem; align-items: center;
-      margin-bottom: 0.4rem; }
-    .actions button, .actions a.btn {
-      font-family: inherit; font-size: 12px;
-      background: rgba(255,255,255,0.07); color: #ddd;
-      border: none; border-radius: 3px;
-      padding: 0.45rem 0.8rem; cursor: pointer; }
-    .actions button:hover, .actions a.btn:hover {
-      background: rgba(156,204,255,0.18); color: #fff; }
-    .actions .copied { color: #9cf; font-size: 12px;
-      opacity: 0; transition: opacity 0.2s; }
-    .actions .copied.show { opacity: 1; }
+    code { background: rgba(255,255,255,0.05); padding: 0.1rem 0.35rem;
+      border-radius: 2px; color: #9cf; font-size: 12.5px; }
   </style>
 </head>
 <body>
   <h1>screensavers</h1>
   <p class="muted">Interactive p5.js / WebGL sketches by chrismo.</p>
-
-  <h2>sketches</h2>
-  <ul class="sketches">
+  <ul>
     <li>
       <a href="petri-dish/">petri-dish</a>
-      <span class="muted">— Physarum slime-mold simulation</span>
+      &nbsp;<span class="muted">— Physarum slime-mold simulation</span>
     </li>
   </ul>
-
-  <h2>build a screensaver URL</h2>
-  <p class="muted">
-    Pick options, then copy the URL into
+  <p class="muted" style="margin-top: 2rem;">
+    To use as a macOS screensaver: open a sketch, tune the panel to taste,
+    press <code>C</code> (or click <em>copy screensaver URL</em>) to get a
+    URL that reproduces the current state, then paste that URL into
     <a href="https://github.com/liquidx/webviewscreensaver">WebViewScreenSaver</a>.
-    See the
-    <a href="https://github.com/chrismo/screensavers#use-as-a-macos-screensaver">README</a>
+    See the <a href="https://github.com/chrismo/screensavers#use-as-a-macos-screensaver">README</a>
     for setup steps.
   </p>
-  <form class="builder" id="builder">
-    <label for="f-sketch">sketch</label>
-    <select id="f-sketch">
-      <option value="petri-dish">petri-dish</option>
-    </select>
-
-    <label for="f-preset">preset</label>
-    <select id="f-preset"></select>
-
-    <label for="f-mode">mode</label>
-    <select id="f-mode">
-      <option value="">manual</option>
-      <option value="lerp" selected>lerp (cycle presets)</option>
-      <option value="drift">drift (perlin auto-morph)</option>
-    </select>
-
-    <span></span>
-    <span class="check-row">
-      <input type="checkbox" id="f-nopanel" checked>
-      <label for="f-nopanel">hide control panel (?nopanel=1)</label>
-    </span>
-  </form>
-
-  <details class="tweaks">
-    <summary>tweaks</summary>
-    <p class="hint">
-      Override preset values. Leave blank to use the preset's defaults.
-      Runtime overrides only stick in manual mode — drift and lerp
-      continuously rewrite these vars.
-    </p>
-    <div class="builder">
-      <label for="f-rotAngle">rotAngle</label>
-      <input type="number" id="f-rotAngle" placeholder="45" step="any">
-
-      <label for="f-sensorAngle">sensorAngle</label>
-      <input type="number" id="f-sensorAngle" placeholder="45" step="any">
-
-      <label for="f-sensorDist">sensorDist</label>
-      <input type="number" id="f-sensorDist" placeholder="10" step="any">
-
-      <label for="f-moldSpeed">moldSpeed</label>
-      <input type="number" id="f-moldSpeed" placeholder="1.0" step="any">
-
-      <label for="f-bgFade">bgFade</label>
-      <input type="number" id="f-bgFade" placeholder="5" step="any">
-
-      <label for="f-num">num</label>
-      <input type="number" id="f-num" placeholder="4000" step="1" min="1">
-
-      <label for="f-lerpDuration">lerpDuration</label>
-      <input type="number" id="f-lerpDuration" placeholder="480" step="any">
-
-      <label for="f-driftSpeed">driftSpeed</label>
-      <input type="number" id="f-driftSpeed" placeholder="0.003" step="any">
-    </div>
-  </details>
-
-  <div class="url-box"><code id="url"></code></div>
-  <div class="actions">
-    <button id="copy" type="button">copy URL</button>
-    <a id="open" class="btn" href="#" target="_blank" rel="noopener">open ↗</a>
-    <span id="copied" class="copied">copied</span>
-  </div>
-
-  <p class="muted" style="margin-top:2.5rem;">
+  <p class="muted" style="margin-top: 2.5rem;">
     <a href="https://github.com/chrismo/screensavers">source on GitHub</a>
   </p>
-
-  <script>
-    // The builder always emits the published canonical URL — that's the one
-    // you'd paste into a screensaver, even when previewing this page locally.
-    const PUBLISHED_BASE = 'https://chrismo.github.io/screensavers/';
-
-    // Per-sketch preset names. Mirrors petri-dish/sketch.js's `presets` list.
-    // Add a new entry here whenever a new sketch lands.
-    const SKETCH_PRESETS = {
-      'petri-dish': [
-        'Slime', 'Cobweb', 'Honeycomb', 'Highways', 'Plasma',
-        'Dendrite', 'Tube', 'Ooze', 'Vermicelli', 'Burlap',
-      ],
-    };
-
-    const $ = (id) => document.getElementById(id);
-
-    function refillPresets() {
-      const sketch = $('f-sketch').value;
-      const presets = SKETCH_PRESETS[sketch] || [];
-      const sel = $('f-preset');
-      // Clear via DOM (no innerHTML).
-      while (sel.firstChild) sel.removeChild(sel.firstChild);
-      const def = document.createElement('option');
-      def.value = '';
-      def.textContent = '— default —';
-      sel.appendChild(def);
-      presets.forEach((name, i) => {
-        const opt = document.createElement('option');
-        opt.value = String(i);
-        opt.textContent = i + ' ' + name;
-        sel.appendChild(opt);
-      });
-    }
-
-    const NUMERIC_PARAMS = [
-      'rotAngle', 'sensorAngle', 'sensorDist', 'moldSpeed', 'bgFade',
-      'num', 'lerpDuration', 'driftSpeed',
-    ];
-
-    function update() {
-      const url = new URL($('f-sketch').value + '/', PUBLISHED_BASE);
-      const params = new URLSearchParams();
-      const preset = $('f-preset').value;
-      const mode = $('f-mode').value;
-      if (preset !== '') params.set('preset', preset);
-      if (mode === 'lerp') params.set('lerp', '1');
-      else if (mode === 'drift') params.set('drift', '1');
-      if ($('f-nopanel').checked) params.set('nopanel', '1');
-
-      NUMERIC_PARAMS.forEach((k) => {
-        const v = $('f-' + k).value;
-        if (v !== '' && Number.isFinite(parseFloat(v))) params.set(k, v);
-      });
-
-      url.search = params.toString();
-      const s = url.toString();
-      $('url').textContent = s;
-      $('open').href = s;
-    }
-
-    refillPresets();
-    update();
-
-    // Listen at the document level so we catch both the basic form and the
-    // tweaks fields (which live outside <form id="builder">).
-    document.addEventListener('input', (e) => {
-      if (!e.target.matches('select, input')) return;
-      if (e.target.id === 'f-sketch') refillPresets();
-      update();
-    });
-    document.addEventListener('change', (e) => {
-      if (!e.target.matches('select, input')) return;
-      if (e.target.id === 'f-sketch') refillPresets();
-      update();
-    });
-
-    $('copy').addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText($('url').textContent);
-        const c = $('copied');
-        c.classList.add('show');
-        setTimeout(() => c.classList.remove('show'), 1200);
-      } catch (e) {
-        // older browsers / no clipboard permission — leave it to the user
-      }
-    });
-  </script>
 </body>
 </html>

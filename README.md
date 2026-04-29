@@ -23,12 +23,15 @@ which loads an arbitrary URL into a screensaver-mode webview. Setup:
    [releases page](https://github.com/liquidx/webviewscreensaver/releases),
    double-click to install, then pick it under
    *System Settings → Screen Saver*).
-2. In the screensaver options, paste in an autoplay URL. The
-   [landing page](https://chrismo.github.io/screensavers/) has a
-   builder for it; each sketch's own README documents its supported
-   params.
-3. Canonical petri-dish autoplay URL as a quick example:
-   `https://chrismo.github.io/screensavers/petri-dish/?nopanel=1&lerp=1`
+2. Open a sketch in the browser, tune its control panel to taste, then
+   press `C` (or click *copy screensaver URL* in the panel's actions
+   row) — it copies a URL that reproduces the current state.
+3. Paste that URL into the WebViewScreenSaver options.
+
+For petri-dish a quick canned URL is
+`https://chrismo.github.io/screensavers/petri-dish/?nopanel=1&lerp=1`.
+Each sketch's own README documents its supported URL params if you'd
+rather hand-build one.
 
 ## Licensing
 
@@ -45,9 +48,7 @@ same license.
 Create `<sketch-name>/index.html` (loads `<script src="sketch.js">`)
 and `<sketch-name>/sketch.js`. Add a `<sketch-name>/README.md` with
 controls and any URL params the sketch honors. Add an entry to the
-Sketches list above. Add the sketch's preset names (if any) to the
-`SKETCH_PRESETS` map in `index.html` so the URL builder can offer them.
-If the sketch is a fork of CC-or-other-licensed work, drop the
-upstream's `LICENSE` file alongside `sketch.js` and add a matching
-SPDX header at the top of `sketch.js`; otherwise it inherits the repo
-MIT license.
+Sketches list above. If the sketch is a fork of CC-or-other-licensed
+work, drop the upstream's `LICENSE` file alongside `sketch.js` and add
+a matching SPDX header at the top of `sketch.js`; otherwise it
+inherits the repo MIT license.

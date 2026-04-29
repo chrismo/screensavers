@@ -211,6 +211,7 @@ const PANEL_HTML = `
         <button class="kbd kbd-action" data-action="drift" title="D">D</button><div class="kbd-desc">drift (perlin)</div>
         <button class="kbd kbd-action" data-action="lerp"  title="L">L</button><div class="kbd-desc">lerp (preset cycle)</div>
         <button class="kbd kbd-action" data-action="reset" title="R">R</button><div class="kbd-desc">reset molds</div>
+        <button class="kbd kbd-action" data-action="copy"  title="C">C</button><div class="kbd-desc" id="copy-desc">copy screensaver URL</div>
         <button class="kbd kbd-action" data-action="hide"  title="H">H</button><div class="kbd-desc">hide / show panel</div>
       </div>
     </div>
@@ -429,6 +430,54 @@ function pickPreset(i) {
   }
 }
 
+// Build a screensaver-friendly URL that reproduces the current panel state
+// and copy it to the clipboard. Only emits params that differ from preset
+// defaults — keeps the URL readable.
+function copyShareUrl() {
+  if (!navigator.clipboard) return;
+
+  const close = (a, b) => Math.abs(a - b) < 1e-6;
+  // Round through toFixed → Number to drop FP noise and trailing zeros.
+  const fmt = (n, d) => Number(n.toFixed(d)).toString();
+
+  const params = new URLSearchParams();
+  params.set('nopanel', '1');
+  params.set('preset', String(presetIdx));
+
+  if (lerpMode) {
+    params.set('lerp', '1');
+  } else if (drift) {
+    params.set('drift', '1');
+  } else {
+    // Manual mode — emit any of the 5 runtime vars that differ from the
+    // preset's value. In drift/lerp those vars get rewritten every frame,
+    // so a snapshot would be misleading.
+    const p = presets[presetIdx];
+    if (!close(rotAngle,    p.rotAngle))    params.set('rotAngle',    fmt(rotAngle, 2));
+    if (!close(sensorAngle, p.sensorAngle)) params.set('sensorAngle', fmt(sensorAngle, 2));
+    if (!close(sensorDist,  p.sensorDist))  params.set('sensorDist',  fmt(sensorDist, 2));
+    if (!close(moldSpeed,   p.moldSpeed))   params.set('moldSpeed',   fmt(moldSpeed, 3));
+    if (!close(bgFade,      p.bgFade))      params.set('bgFade',      fmt(bgFade, 1));
+  }
+
+  // Speed knobs / mold count apply regardless of mode.
+  if (!close(lerpDuration, 480))   params.set('lerpDuration', fmt(lerpDuration, 0));
+  if (!close(driftSpeed,   0.003)) params.set('driftSpeed',   fmt(driftSpeed, 5));
+  if (num !== 4000)                params.set('num',          String(num));
+
+  const url = new URL(location.pathname, location.href);
+  url.search = params.toString();
+
+  navigator.clipboard.writeText(url.toString()).then(() => {
+    const desc = document.getElementById('copy-desc');
+    if (!desc) return;
+    const orig = desc.textContent;
+    desc.textContent = 'copied!';
+    desc.style.color = '#9cf';
+    setTimeout(() => { desc.textContent = orig; desc.style.color = ''; }, 1200);
+  }).catch(() => {});
+}
+
 function keyPressed() {
   if      (keyCode === LEFT_ARROW)  adjustParam('rotAngle', -1);
   else if (keyCode === RIGHT_ARROW) adjustParam('rotAngle', +1);
@@ -443,6 +492,7 @@ function keyPressed() {
   else if (key === 'd' || key === 'D') toggleDrift();
   else if (key === 'l' || key === 'L') toggleLerp();
   else if (key === 'r' || key === 'R') resetMolds();
+  else if (key === 'c' || key === 'C') copyShareUrl();
   else if (key === 'h' || key === 'H') toggleDrawer();
   else if (key >= '0' && key <= '9')   pickPreset(Number(key));
   else return;
@@ -487,6 +537,7 @@ function setupDom() {
     else if (a === 'drift') toggleDrift();
     else if (a === 'lerp')  toggleLerp();
     else if (a === 'reset') resetMolds();
+    else if (a === 'copy')  copyShareUrl();
     else if (a === 'hide')  toggleDrawer();
     el.blur();
   });
