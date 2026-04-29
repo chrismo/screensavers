@@ -80,10 +80,14 @@ const lerpDuration = 480; // frames per transition (~8s @ 60fps)
 // already in the DOM.
 const dom = {};
 
-const PANEL_CSS = `
+// Base host CSS — always injected, even with ?nopanel=1, so the body
+// isn't a flash of white before the canvas paints its first frame.
+const BASE_CSS = `
   html, body { margin: 0; padding: 0; overflow: hidden; background: #111; }
   canvas { display: block; }
+`;
 
+const PANEL_CSS = `
   #drawer {
     position: fixed; top: 0; left: 0; height: 100vh; width: 280px;
     background: rgba(10, 12, 18, 0.55);
@@ -207,11 +211,15 @@ const PANEL_HTML = `
   </div>
 `;
 
+function injectCss(css) {
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.appendChild(style);
+}
+
 function buildPanel() {
   if (document.getElementById('drawer')) return;
-  const style = document.createElement('style');
-  style.textContent = PANEL_CSS;
-  document.head.appendChild(style);
+  injectCss(PANEL_CSS);
   // PANEL_HTML is a static template literal with no user input — DOMParser
   // is the script-safe path for materializing it into DOM nodes.
   const parsed = new DOMParser().parseFromString(PANEL_HTML, 'text/html');
@@ -219,9 +227,12 @@ function buildPanel() {
 }
 
 function setup() {
+  injectCss(BASE_CSS);
   createCanvas(windowWidth, windowHeight);
   angleMode(DEGREES);
   colorMode(HSB, 360, 100, 100, 255);
+  background(0); // start fully opaque black so the per-frame low-alpha
+                 // background(0, bgFade) doesn't fade up from a transparent canvas
   d = pixelDensity();
 
   for (let i = 0; i < num; i++) {
