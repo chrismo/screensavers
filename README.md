@@ -15,10 +15,9 @@ canonical autoplay form for screensaver use adds `?nopanel=1&lerp=1`
 
 ## Use as a macOS screensaver
 
-Any of these sketches can be run as a macOS screensaver via a webview-
-based screensaver such as
-[WebViewScreenSaver](https://github.com/liquidx/webviewscreensaver).
-Setup:
+Any of these sketches can be run as a macOS screensaver via
+[WebViewScreenSaver](https://github.com/liquidx/webviewscreensaver),
+which loads an arbitrary URL into a screensaver-mode webview. Setup:
 
 1. Install WebViewScreenSaver (download the `.saver` from the
    [releases page](https://github.com/liquidx/webviewscreensaver/releases),
