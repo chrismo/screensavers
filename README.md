@@ -9,8 +9,8 @@ canonical autoplay form for screensaver use adds `?nopanel=1&lerp=1`
 ## Sketches
 
 - [petri-dish/](petri-dish/) — interactive Physarum slime-mold
-  simulation with 10 named presets, perlin auto-drift, and a
-  preset-cycle lerp mode.
+  simulation. See [petri-dish/README.md](petri-dish/README.md) for
+  controls, presets, and supported URL params.
   Live: https://chrismo.github.io/screensavers/petri-dish/
 
 ## Use as a macOS screensaver
@@ -23,24 +23,12 @@ which loads an arbitrary URL into a screensaver-mode webview. Setup:
    [releases page](https://github.com/liquidx/webviewscreensaver/releases),
    double-click to install, then pick it under
    *System Settings → Screen Saver*).
-2. In the screensaver options, paste in the autoplay URL. The
+2. In the screensaver options, paste in an autoplay URL. The
    [landing page](https://chrismo.github.io/screensavers/) has a
-   builder that generates one for you.
-3. Canonical petri-dish autoplay URL:
+   builder for it; each sketch's own README documents its supported
+   params.
+3. Canonical petri-dish autoplay URL as a quick example:
    `https://chrismo.github.io/screensavers/petri-dish/?nopanel=1&lerp=1`
-
-### petri-dish URL params
-
-| param        | effect                                         |
-| ------------ | ---------------------------------------------- |
-| `?nopanel=1` | hide the control drawer (recommended for screensaver use) |
-| `?lerp=1`    | start in lerp mode (smoothly cycles through all 10 presets) |
-| `?drift=1`   | start in drift mode (perlin auto-morph)        |
-| `?preset=N`  | start on preset N (0–9)                        |
-
-`lerp` wins over `drift` if both are passed. `preset` is applied first,
-so e.g. `?preset=3&drift=1` starts the drift orbit biased toward
-preset 3.
 
 ## Licensing
 
@@ -55,7 +43,10 @@ same license.
 ## Adding a new sketch
 
 Create `<sketch-name>/index.html` (loads `<script src="sketch.js">`)
-and `<sketch-name>/sketch.js`. Add an entry to the Sketches list above.
+and `<sketch-name>/sketch.js`. Add a `<sketch-name>/README.md` with
+controls and any URL params the sketch honors. Add an entry to the
+Sketches list above. Add the sketch's preset names (if any) to the
+`SKETCH_PRESETS` map in `index.html` so the URL builder can offer them.
 If the sketch is a fork of CC-or-other-licensed work, drop the
 upstream's `LICENSE` file alongside `sketch.js` and add a matching
 SPDX header at the top of `sketch.js`; otherwise it inherits the repo

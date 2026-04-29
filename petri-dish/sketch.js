@@ -30,6 +30,8 @@ const angleStep = 5;
 const distStep = 1;
 const speedStep = 0.5;
 const fadeStep = 1;
+const lerpDurationStep = 60; // 1s @ 60fps
+const driftSpeedStep = 0.001;
 
 // --- presets ---------------------------------------------------------------
 // 0-9 each snapshot the full live config. Tuned to span the regimes
@@ -52,7 +54,7 @@ let presetIdx = 0;
 // --- drift (perlin auto-morph) --------------------------------------------
 let drift = false;
 let driftT = 0;
-const driftSpeed = 0.003;
+let driftSpeed = 0.003;
 const driftRanges = {
   rotAngle:    { min: 5,   max: 90, offset: 0   },
   sensorAngle: { min: 5,   max: 90, offset: 100 },
@@ -71,7 +73,7 @@ let lerpMode = false;
 let lerpFrom = 0;
 let lerpTo = 1;
 let lerpT = 0;
-const lerpDuration = 480; // frames per transition (~8s @ 60fps)
+let lerpDuration = 480; // frames per transition (~8s @ 60fps)
 
 // --- DOM panel handles ----------------------------------------------------
 // The control panel is injected from JS so the same sketch.js works locally
@@ -200,6 +202,10 @@ const PANEL_HTML = `
       <div class="row wide"><span class="label">preset</span><span id="v-preset" class="val accent"></span></div>
       <div id="v-preset-pills" class="preset-pills"></div>
 
+      <h2>timing</h2>
+      ${paramRow('lerpDuration', 'lerpDuration', '')}
+      ${paramRow('driftSpeed',   'driftSpeed',   '')}
+
       <h2>actions</h2>
       <div class="legend">
         <button class="kbd kbd-action" data-action="drift" title="D">D</button><div class="kbd-desc">drift (perlin)</div>
@@ -228,6 +234,15 @@ function buildPanel() {
 
 function setup() {
   injectCss(BASE_CSS);
+
+  // num affects mold-creation count, so it has to be read before the loop.
+  // Everything else gets applied after mold setup.
+  const params = new URLSearchParams(location.search);
+  const numOverride = parseFloat(params.get('num'));
+  if (Number.isFinite(numOverride) && numOverride > 0) {
+    num = Math.max(1, Math.floor(numOverride));
+  }
+
   createCanvas(windowWidth, windowHeight);
   angleMode(DEGREES);
   colorMode(HSB, 360, 100, 100, 255);
@@ -243,23 +258,50 @@ function setup() {
     LABEL
   );
 
-  applyUrlParams();
+  applyUrlParams(params);
 }
 
-// URL params for screensaver / shareable-link autoplay:
-//   ?preset=N   apply preset N (0-9) before any mode kicks in
-//   ?lerp=1     start in lerp mode (preset cycle)
-//   ?drift=1    start in drift mode (perlin auto-morph)
-//   ?nopanel=1  skip the control drawer entirely
-// lerp wins over drift if both passed.
-function applyUrlParams() {
-  const params = new URLSearchParams(location.search);
-
+// URL params for screensaver / shareable-link autoplay. Applied in order:
+// preset → numeric overrides → mode → panel.
+//
+// Mode + panel:
+//   ?preset=N      apply preset N (0-9) before overrides and mode
+//   ?lerp=1        start in lerp mode (preset cycle)
+//   ?drift=1       start in drift mode (perlin auto-morph)
+//   ?nopanel=1     skip the control drawer entirely
+//
+// Runtime overrides (override the preset's values):
+//   ?rotAngle=N    rotation step (deg)
+//   ?sensorAngle=N sensor splay (deg)
+//   ?sensorDist=N  sensor reach (px)
+//   ?moldSpeed=N   per-frame movement
+//   ?bgFade=N      per-frame trail fade alpha (1-255)
+//
+// Speed knobs (apply regardless of mode):
+//   ?num=N           mold count (default 4000) — applied in setup() above
+//   ?lerpDuration=N  frames per lerp transition (default 480)
+//   ?driftSpeed=N    perlin step per frame (default 0.003)
+//
+// lerp wins over drift if both passed. Runtime overrides only stick in
+// manual mode — drift and lerp continuously rewrite the same vars in draw().
+function applyUrlParams(params) {
   const presetParam = params.get('preset');
   if (presetParam !== null) {
     const i = Number(presetParam);
     if (Number.isInteger(i) && i >= 0 && i < presets.length) applyPreset(i);
   }
+
+  const setNum = (key, setter) => {
+    const v = parseFloat(params.get(key));
+    if (Number.isFinite(v)) setter(v);
+  };
+  setNum('rotAngle',     (v) => { rotAngle = v; });
+  setNum('sensorAngle',  (v) => { sensorAngle = v; });
+  setNum('sensorDist',   (v) => { sensorDist = v; });
+  setNum('moldSpeed',    (v) => { moldSpeed = v; });
+  setNum('bgFade',       (v) => { bgFade = v; });
+  setNum('lerpDuration', (v) => { lerpDuration = v; });
+  setNum('driftSpeed',   (v) => { driftSpeed = v; });
 
   if (params.get('lerp') === '1') {
     lerpMode = true;
@@ -354,6 +396,8 @@ function adjustParam(name, dir) {
     ? max(0.1, moldSpeed - speedStep)
     : (moldSpeed < speedStep ? speedStep : moldSpeed + speedStep); // snap to grid from 0.1 floor
   else if (name === 'bgFade')      bgFade       = dir < 0 ? max(1, bgFade - fadeStep) : bgFade + fadeStep;
+  else if (name === 'lerpDuration') lerpDuration = dir < 0 ? max(60, lerpDuration - lerpDurationStep) : lerpDuration + lerpDurationStep;
+  else if (name === 'driftSpeed')   driftSpeed   = dir < 0 ? max(0.0005, driftSpeed - driftSpeedStep) : driftSpeed + driftSpeedStep;
 }
 
 function toggleDrift() {
@@ -407,14 +451,16 @@ function keyPressed() {
 
 // --- DOM panel ------------------------------------------------------------
 function setupDom() {
-  dom.rotAngle    = document.getElementById('v-rotAngle');
-  dom.sensorAngle = document.getElementById('v-sensorAngle');
-  dom.sensorDist  = document.getElementById('v-sensorDist');
-  dom.moldSpeed   = document.getElementById('v-moldSpeed');
-  dom.bgFade      = document.getElementById('v-bgFade');
-  dom.mode        = document.getElementById('v-mode');
-  dom.preset      = document.getElementById('v-preset');
-  dom.presetPills = document.getElementById('v-preset-pills');
+  dom.rotAngle     = document.getElementById('v-rotAngle');
+  dom.sensorAngle  = document.getElementById('v-sensorAngle');
+  dom.sensorDist   = document.getElementById('v-sensorDist');
+  dom.moldSpeed    = document.getElementById('v-moldSpeed');
+  dom.bgFade       = document.getElementById('v-bgFade');
+  dom.lerpDuration = document.getElementById('v-lerpDuration');
+  dom.driftSpeed   = document.getElementById('v-driftSpeed');
+  dom.mode         = document.getElementById('v-mode');
+  dom.preset       = document.getElementById('v-preset');
+  dom.presetPills  = document.getElementById('v-preset-pills');
 
   for (let i = 0; i < presets.length; i++) {
     const pill = document.createElement('button');
@@ -453,11 +499,13 @@ function toggleDrawer() {
 
 function updateDom() {
   if (!dom.rotAngle) return; // panel was suppressed via ?nopanel=1
-  dom.rotAngle.textContent    = `${nf(rotAngle, 1, 1)}°`;
-  dom.sensorAngle.textContent = `${nf(sensorAngle, 1, 1)}°`;
-  dom.sensorDist.textContent  = `${nf(sensorDist, 1, 1)}px`;
-  dom.moldSpeed.textContent   = `${nf(moldSpeed, 1, 2)}×`;
-  dom.bgFade.textContent      = nf(bgFade, 1, 1);
+  dom.rotAngle.textContent     = `${nf(rotAngle, 1, 1)}°`;
+  dom.sensorAngle.textContent  = `${nf(sensorAngle, 1, 1)}°`;
+  dom.sensorDist.textContent   = `${nf(sensorDist, 1, 1)}px`;
+  dom.moldSpeed.textContent    = `${nf(moldSpeed, 1, 2)}×`;
+  dom.bgFade.textContent       = nf(bgFade, 1, 1);
+  dom.lerpDuration.textContent = `${nf(lerpDuration / 60, 1, 1)}s`;
+  dom.driftSpeed.textContent   = nf(driftSpeed, 1, 4);
 
   let modeStr = 'manual';
   if (drift) modeStr = 'drift (perlin)';
