@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: CC-BY-NC-SA-4.0
 /*
 Petri Dish — interactive Physarum playground
 
@@ -231,8 +232,37 @@ function setup() {
     LABEL
   );
 
-  buildPanel();
-  setupDom();
+  applyUrlParams();
+}
+
+// URL params for screensaver / shareable-link autoplay:
+//   ?preset=N   apply preset N (0-9) before any mode kicks in
+//   ?lerp=1     start in lerp mode (preset cycle)
+//   ?drift=1    start in drift mode (perlin auto-morph)
+//   ?nopanel=1  skip the control drawer entirely
+// lerp wins over drift if both passed.
+function applyUrlParams() {
+  const params = new URLSearchParams(location.search);
+
+  const presetParam = params.get('preset');
+  if (presetParam !== null) {
+    const i = Number(presetParam);
+    if (Number.isInteger(i) && i >= 0 && i < presets.length) applyPreset(i);
+  }
+
+  if (params.get('lerp') === '1') {
+    lerpMode = true;
+    lerpFrom = presetIdx;
+    lerpTo = (presetIdx + 1) % presets.length;
+    lerpT = 0;
+  } else if (params.get('drift') === '1') {
+    drift = true;
+  }
+
+  if (params.get('nopanel') !== '1') {
+    buildPanel();
+    setupDom();
+  }
 }
 
 function draw() {
@@ -406,10 +436,12 @@ function setupDom() {
 }
 
 function toggleDrawer() {
-  document.getElementById('drawer').classList.toggle('open');
+  const drawer = document.getElementById('drawer');
+  if (drawer) drawer.classList.toggle('open');
 }
 
 function updateDom() {
+  if (!dom.rotAngle) return; // panel was suppressed via ?nopanel=1
   dom.rotAngle.textContent    = `${nf(rotAngle, 1, 1)}°`;
   dom.sensorAngle.textContent = `${nf(sensorAngle, 1, 1)}°`;
   dom.sensorDist.textContent  = `${nf(sensorDist, 1, 1)}px`;
