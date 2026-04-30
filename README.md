@@ -13,25 +13,22 @@ canonical autoplay form for screensaver use adds `?nopanel=1&lerp=1`
   controls, presets, and supported URL params.
   Live: https://chrismo.github.io/screensavers/petri-dish/
 
-## Use as a macOS screensaver
+## Running as a screensaver / desktop
 
-Any of these sketches can be run as a macOS screensaver via
-[WebViewScreenSaver](https://github.com/liquidx/webviewscreensaver),
-which loads an arbitrary URL into a screensaver-mode webview. Setup:
+Open a sketch, tune the panel to taste, press `C` (or click *copy
+screensaver URL* in the panel's actions row) — it copies a URL that
+reproduces the current state. Paste that URL into whatever loads URLs
+on your desktop or as a screensaver.
 
-1. Install WebViewScreenSaver (download the `.saver` from the
-   [releases page](https://github.com/liquidx/webviewscreensaver/releases),
-   double-click to install, then pick it under
-   *System Settings → Screen Saver*).
-2. Open a sketch in the browser, tune its control panel to taste, then
-   press `C` (or click *copy screensaver URL* in the panel's actions
-   row) — it copies a URL that reproduces the current state.
-3. Paste that URL into the WebViewScreenSaver options.
+On macOS the situation is messier than it should be — Apple's
+deprecated the third-party screensaver pipeline on Tahoe and pushed
+people toward their own private aerial-video engine. See
+[macos-screensaver.md](macos-screensaver.md) for the current
+recommendations (TL;DR: Plash for "petri-dish on the desktop" works
+best; WebViewScreenSaver still works on Tahoe but with rough edges).
 
-For petri-dish a quick canned URL is
+A quick canned petri-dish URL:
 `https://chrismo.github.io/screensavers/petri-dish/?nopanel=1&lerp=1`.
-Each sketch's own README documents its supported URL params if you'd
-rather hand-build one.
 
 ## Licensing
 
