@@ -25,7 +25,7 @@ const SIZE_MAX = 2.5;
 const CHASE_RAMP = 0.25;        // trapezoidal motion profile shape — fraction of trajectory spent ramping in/out
 const PICK_DEPTH_FRAC = 0.5;    // only orbs deeper than this fraction of |depth| are eligible
 const CAM_RECENTER_RATE = 1.5;  // when chase is off, how fast camera drifts back to (0,0)
-const INTRO_DURATION = 6.0;     // seconds — camera arc-in from in front of the comet
+const APPROACH_DURATION = 6.0;  // seconds — camera arc-in from in front of the comet
 const MAX_DT = 0.05;
 
 // --- panel adjustment step sizes ----------------------------------------
@@ -50,14 +50,14 @@ const helpText = {
 // Each preset snapshots the full live config. Tuned to span regimes:
 // quiet starfield, dense warp, narrow tube, sparse void, etc.
 const presets = [
-  { name: 'Calm',    num: 500,  speed: 4.0, radius: 30, depth: 100, spin: 0.20, chase: 0.15 },
-  { name: 'Drift',   num: 300,  speed: 2.0, radius: 30, depth: 100, spin: 0.00, chase: 0.00 },
-  { name: 'Warp',    num: 1000, speed: 8.0, radius: 40, depth: 150, spin: 0.30, chase: 0.25 },
-  { name: 'Hunt',    num: 250,  speed: 5.0, radius: 25, depth: 100, spin: 0.15, chase: 0.85 },
-  { name: 'Cluster', num: 800,  speed: 3.0, radius: 12, depth:  80, spin: 0.10, chase: 0.20 },
-  { name: 'Vast',    num: 200,  speed: 2.0, radius: 40, depth: 180, spin: 0.05, chase: 0.05 },
-  { name: 'Spin',    num: 400,  speed: 3.0, radius: 30, depth: 100, spin: 0.60, chase: 0.00 },
-  { name: 'Disco',   num: 1200, speed: 7.0, radius: 35, depth: 100, spin: 0.50, chase: 0.50 },
+  { name: 'Calm',    num: 500,  speed: 4.0,  radius: 28, depth: 100, spin: 0.20, chase: 0.30 },
+  { name: 'Drift',   num: 200,  speed: 1.0,  radius: 35, depth: 180, spin: 0.05, chase: 0.00 },
+  { name: 'Warp',    num: 1500, speed: 12.0, radius: 50, depth: 250, spin: 0.30, chase: 0.25 },
+  { name: 'Hunt',    num: 200,  speed: 12.0, radius: 45, depth:  80, spin: 0.10, chase: 1.20 },
+  { name: 'Cluster', num: 400,  speed: 8.0,  radius:  8, depth:  60, spin: 0.20, chase: 0.30 },
+  { name: 'Vast',    num: 1200, speed: 1.5,  radius: 160, depth: 280, spin: 0.02, chase: 0.00 },
+  { name: 'Spin',    num: 600,  speed: 2.0,  radius: 35, depth: 100, spin: 1.50, chase: 0.00 },
+  { name: 'Disco',   num: 2000, speed: 15.0, radius: 35, depth: 100, spin: 0.50, chase: 1.00 },
 ];
 let presetIdx = 0;
 
@@ -209,7 +209,7 @@ const PANEL_HTML = `
       <div class="legend">
         <button class="kbd kbd-action" data-action="reset">R</button><div class="kbd-desc">reset orbs</div>
         <button class="kbd kbd-action" data-action="copy">C</button><div class="kbd-desc" id="copy-desc">copy screensaver URL</div>
-        <button class="kbd kbd-action" data-action="intro">I</button><div class="kbd-desc">intro: <span id="v-intro" class="accent">on</span></div>
+        <button class="kbd kbd-action" data-action="approach">A</button><div class="kbd-desc">approach: <span id="v-approach" class="accent">on</span></div>
         <button class="kbd kbd-action" data-action="hide">H</button><div class="kbd-desc">hide / show panel</div>
       </div>
     </div>
@@ -334,7 +334,7 @@ function respawn(sprite, i) {
 }
 
 let targetIdx = -1;
-let introT = 0;
+let approachT = 0;
 // Chase planning state: on each new target, we plan a trapezoidal-eased
 // trajectory from the camera's current position to a "trust point" computed
 // from chase × (death − target). The camera follows the plan exactly,
@@ -344,8 +344,8 @@ let planStartT = 0;
 let planAimX = 0, planAimY = 0;
 let planDuration = 1;
 let lastChase = 0;          // detect live chase changes so the trajectory replans
-let playIntro = true;       // user preference: play intro on load + every preset change
-let introActive = playIntro;  // currently mid-intro?
+let playApproach = true;       // user preference: play approach on load + every preset change
+let approachActive = playApproach;  // currently mid-approach?
 let cometRoll = 0;  // accumulated cone-spin angle (radians); orbs rotate around z by this.
 
 function pickTarget() {
@@ -418,14 +418,14 @@ function applyPreset(i) {
   if (sprites.length > 0 && p.num !== num) setNum(p.num);
   else num = p.num;
   presetIdx = i;
-  if (playIntro) {
-    introT = 0;
-    introActive = true;
+  if (playApproach) {
+    approachT = 0;
+    approachActive = true;
   }
 }
 
-function toggleIntro() {
-  playIntro = !playIntro;
+function toggleApproach() {
+  playApproach = !playApproach;
 }
 
 function pickPreset(i) {
@@ -436,7 +436,7 @@ function adjustParam(name, dir) {
   const clamp = (lo, hi, v) => Math.max(lo, Math.min(hi, v));
   if      (name === 'num')    setNum(clamp(50,  2000, num    + dir * stepNum));
   else if (name === 'speed')  speed  = clamp(0.5, 15,  speed  + dir * stepSpeed);
-  else if (name === 'radius') radius = clamp(5,   80,  radius + dir * stepRadius);
+  else if (name === 'radius') radius = clamp(5,   180, radius + dir * stepRadius);
   else if (name === 'depth')  depth  = clamp(30,  300, depth  + dir * stepDepth);
   else if (name === 'spin')   spin   = clamp(0,    2,  spin   + dir * stepSpin);
   else if (name === 'chase')  chase  = clamp(0,    2,  chase  + dir * stepChase);
@@ -452,7 +452,7 @@ function copyShareUrl() {
 
   const params = new URLSearchParams();
   params.set('nopanel', '1');
-  if (!playIntro) params.set('intro', '0');
+  if (!playApproach) params.set('approach', '0');
   params.set('preset', String(presetIdx));
 
   const p = presets[presetIdx];
@@ -477,11 +477,11 @@ function copyShareUrl() {
 }
 
 // --- URL params ---------------------------------------------------------
-// Applied in order: intro → preset → numeric overrides → panel.
+// Applied in order: approach → preset → numeric overrides → panel.
 //
 // ?preset=N   apply preset N (0 to presets.length-1) before overrides
 // ?nopanel=1  skip the control drawer entirely
-// ?intro=0    skip the intro animation (preset changes also won't replay it)
+// ?approach=0 skip the approach animation (preset changes also won't replay it)
 // ?num=N      orb count
 // ?speed=N    flow speed
 // ?radius=N   cone radius at camera plane
@@ -491,10 +491,10 @@ function copyShareUrl() {
 function applyUrlParams() {
   const params = new URLSearchParams(location.search);
 
-  // Parse intro before preset so applyPreset's intro-replay respects the flag.
-  if (params.get('intro') === '0') {
-    playIntro = false;
-    introActive = false;
+  // Parse approach before preset so applyPreset's approach-replay respects the flag.
+  if (params.get('approach') === '0') {
+    playApproach = false;
+    approachActive = false;
   }
 
   const presetParam = params.get('preset');
@@ -530,7 +530,7 @@ function setupDom() {
   dom.chase   = document.getElementById('v-chase');
   dom.preset  = document.getElementById('v-preset');
   dom.presetPills = document.getElementById('v-preset-pills');
-  dom.intro   = document.getElementById('v-intro');
+  dom.approach = document.getElementById('v-approach');
 
   for (let i = 0; i < presets.length; i++) {
     const pill = document.createElement('button');
@@ -554,7 +554,7 @@ function setupDom() {
     if      (a === 'adjust') adjustParam(el.dataset.param, Number(el.dataset.dir));
     else if (a === 'reset')  resetOrbs();
     else if (a === 'copy')   copyShareUrl();
-    else if (a === 'intro')  toggleIntro();
+    else if (a === 'approach') toggleApproach();
     else if (a === 'hide')   toggleDrawer();
     el.blur();
   });
@@ -592,7 +592,7 @@ function updateDom() {
   dom.spin.textContent   = `${spin.toFixed(2)}`;
   dom.chase.textContent  = `${chase.toFixed(2)}`;
   dom.preset.textContent = presets[presetIdx].name;
-  if (dom.intro) dom.intro.textContent = playIntro ? 'on' : 'off';
+  if (dom.approach) dom.approach.textContent = playApproach ? 'on' : 'off';
 
   for (let i = 0; i < dom.presetPills.children.length; i++) {
     dom.presetPills.children[i].classList.toggle('active', i === presetIdx);
@@ -613,7 +613,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === '.')          adjustParam('spin', +1);
   else if (e.key === 'r' || e.key === 'R') resetOrbs();
   else if (e.key === 'c' || e.key === 'C') copyShareUrl();
-  else if (e.key === 'i' || e.key === 'I') toggleIntro();
+  else if (e.key === 'a' || e.key === 'A') toggleApproach();
   else if (e.key === 'h' || e.key === 'H') toggleDrawer();
   else if (e.key >= '0' && e.key <= '9') {
     const i = (Number(e.key) + 9) % 10;  // 1..9,0 → 0..9 (keyboard layout order)
@@ -648,7 +648,7 @@ function tick(now) {
   last = now;
 
   // Spin lives on the cone of orbs, not the camera — so the spin is visible
-  // from any camera angle (including the intro arc) and the star sprite's
+  // from any camera angle (including the approach arc) and the star sprite's
   // cross spikes are naturally world-fixed without counter-rotation.
   cometRoll += spin * dt;
   const cosR = Math.cos(cometRoll);
@@ -668,15 +668,15 @@ function tick(now) {
     if (sprite.position.z > Z_NEAR) respawn(sprite, i);
   }
 
-  if (introActive) {
-    // Intro: wide semicircular arc around the cone. Camera starts on the
+  if (approachActive) {
+    // Approach: wide semicircular arc around the cone. Camera starts on the
     // spawn-point side of the cone (past the vertex at z=-depth), swings
     // around to the side, and ends at the origin (the normal chase position).
     //   θ=0    → (0, y, -2R)  — past the vertex (z = -2*depth)
     //   θ=π/2  → (R, y, -R)   — to the side (offset = depth, at vertex z-plane)
     //   θ=π    → (0, y,  0)   — at origin
-    introT += dt;
-    const k = Math.min(introT / INTRO_DURATION, 1);
+    approachT += dt;
+    const k = Math.min(approachT / APPROACH_DURATION, 1);
     const eased = k * k * (3 - 2 * k);  // smoothstep
     const theta = eased * Math.PI;
     const R = depth * 1.0;
@@ -687,7 +687,7 @@ function tick(now) {
     );
     camera.lookAt(0, 0, -depth * 0.4);  // track the cone middle throughout
     if (k >= 1) {
-      introActive = false;
+      approachActive = false;
       camera.position.set(0, 0, 0);
     }
   } else {
