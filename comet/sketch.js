@@ -55,7 +55,7 @@ const presets = [
   { name: 'Warp',    num: 1500, speed: 12.0, radius: 50, depth: 250, spin: 0.30, chase: 0.25 },
   { name: 'Hunt',    num: 200,  speed: 12.0, radius: 45, depth:  80, spin: 0.10, chase: 1.20 },
   { name: 'Cluster', num: 400,  speed: 8.0,  radius:  8, depth:  60, spin: 0.20, chase: 0.30 },
-  { name: 'Vast',    num: 1200, speed: 1.5,  radius: 160, depth: 280, spin: 0.02, chase: 0.00 },
+  { name: 'Vast',    num: 1200, speed: 1.5,  radius: 160, depth: 280, spin: 0.02, chase: 0.05 },
   { name: 'Spin',    num: 600,  speed: 2.0,  radius: 35, depth: 100, spin: 1.50, chase: 0.00 },
   { name: 'Disco',   num: 2000, speed: 15.0, radius: 35, depth: 100, spin: 0.50, chase: 1.00 },
 ];
