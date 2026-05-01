@@ -135,7 +135,7 @@ const PANEL_CSS = `
   .row .label { color: #888; }
   .row .val { color: #fff; font-variant-numeric: tabular-nums; text-align: right; }
   .row .val.accent { color: #9cf; }
-  .row .keys { justify-self: center; display: flex; flex-direction: row; align-items: center; gap: 6px; }
+  .row .keys { justify-self: start; display: flex; flex-direction: row; align-items: center; gap: 6px; }
   .row .key-hint { font-size: 10px; color: #5b5b5b; letter-spacing: 0.05em; line-height: 1; white-space: nowrap; }
   .row.wide { grid-template-columns: 1fr auto; }
 
@@ -208,11 +208,11 @@ const PANEL_HTML = `
 
       <h2>actions</h2>
       <div class="legend">
-        <button class="kbd kbd-action" data-action="drift" title="D">D</button><div class="kbd-desc">drift (perlin)</div>
-        <button class="kbd kbd-action" data-action="lerp"  title="L">L</button><div class="kbd-desc">lerp (preset cycle)</div>
-        <button class="kbd kbd-action" data-action="reset" title="R">R</button><div class="kbd-desc">reset molds</div>
-        <button class="kbd kbd-action" data-action="copy"  title="C">C</button><div class="kbd-desc" id="copy-desc">copy screensaver URL</div>
-        <button class="kbd kbd-action" data-action="hide"  title="H">H</button><div class="kbd-desc">hide / show panel</div>
+        <button class="kbd kbd-action" data-action="drift">D</button><div class="kbd-desc">drift (perlin)</div>
+        <button class="kbd kbd-action" data-action="lerp">L</button><div class="kbd-desc">lerp (preset cycle)</div>
+        <button class="kbd kbd-action" data-action="reset">R</button><div class="kbd-desc">reset molds</div>
+        <button class="kbd kbd-action" data-action="copy">C</button><div class="kbd-desc" id="copy-desc">copy screensaver URL</div>
+        <button class="kbd kbd-action" data-action="hide">H</button><div class="kbd-desc">hide / show panel</div>
       </div>
     </div>
   </div>
@@ -494,7 +494,7 @@ function keyPressed() {
   else if (key === 'r' || key === 'R') resetMolds();
   else if (key === 'c' || key === 'C') copyShareUrl();
   else if (key === 'h' || key === 'H') toggleDrawer();
-  else if (key >= '0' && key <= '9')   pickPreset(Number(key));
+  else if (key >= '0' && key <= '9')   pickPreset((Number(key) + 9) % 10);
   else return;
   return false;
 }
@@ -515,7 +515,7 @@ function setupDom() {
   for (let i = 0; i < presets.length; i++) {
     const pill = document.createElement('button');
     pill.className = 'pill';
-    pill.textContent = i;
+    pill.textContent = (i + 1) % 10;
     pill.addEventListener('click', () => { pickPreset(i); pill.blur(); });
     dom.presetPills.appendChild(pill);
   }

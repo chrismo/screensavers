@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>chase-cam lab</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; min-height: 100%;
+      background: #1a2230; color: #ddd;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 13px; line-height: 1.5;
+    }
+    body { padding: 2.5rem 1.5rem 4rem; max-width: 56rem; margin: 0 auto; }
+    h1 { font-size: 16px; font-weight: 500; letter-spacing: 0.04em; margin: 0 0 0.4rem; color: #fff; }
+    p { margin: 0.4rem 0; color: #aaa; font-size: 12px; }
+    p code { background: rgba(255,255,255,0.06); padding: 0.05rem 0.3rem;
+             border-radius: 2px; color: #cde; font-size: 11px; }
+    a { color: #9cf; text-decoration: none; }
+    a:hover { color: #fff; }
+    h2 { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em;
+         margin: 2rem 0 0.6rem; color: #888; }
+
+    .panes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.8rem; margin-top: 0.5rem; }
+    .pane { display: flex; flex-direction: column; align-items: stretch; }
+    .pane canvas { width: 100%; aspect-ratio: 1; background: rgba(0,0,0,0.25); border-radius: 4px; display: block; }
+    .pane .pane-label { display: flex; justify-content: space-between; padding: 0.4rem 0.1rem 0; }
+    .pane .chase-val { color: #9cf; font-variant-numeric: tabular-nums; }
+    .pane .delta-val { color: #888; font-size: 11px; font-variant-numeric: tabular-nums; }
+
+    .controls { display: grid; grid-template-columns: 14rem 1fr; gap: 0.45rem 1rem; align-items: center; }
+    .controls .label { color: #888; font-size: 12px; }
+    .controls .opts { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .opt {
+      background: rgba(255,255,255,0.06); color: #ccc;
+      border: none; padding: 0.3rem 0.7rem; border-radius: 3px;
+      cursor: pointer; font: inherit; font-size: 11.5px;
+    }
+    .opt:hover { background: rgba(255,255,255,0.12); color: #fff; }
+    .opt.active { background: rgba(156, 204, 255, 0.22); color: #9cf; }
+    .controls .slider-row { display: flex; align-items: center; gap: 0.6rem; }
+    .controls input[type=range] { flex: 1; max-width: 16rem; accent-color: #9cf; }
+    .controls .num { color: #fff; font-variant-numeric: tabular-nums; min-width: 3rem; text-align: right; }
+
+    .legend { display: flex; gap: 1.2rem; flex-wrap: wrap; margin-top: 0.5rem; font-size: 11.5px; color: #888; }
+    .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: 0.4rem; }
+
+    .notes { color: #888; font-size: 11.5px; margin-top: 1rem; padding-top: 1rem;
+             border-top: 1px solid rgba(255,255,255,0.06); }
+    .notes p { margin: 0.5rem 0; color: #888; }
+    .notes code { background: rgba(255,255,255,0.06); padding: 0.05rem 0.3rem;
+                  border-radius: 2px; color: #cde; font-size: 11px; }
+
+    .actions { margin-top: 0.7rem; }
+    .actions .opt { font-size: 11px; }
+  </style>
+</head>
+<body>
+  <h1>chase-cam lab</h1>
+  <p>In <a href="../comet/">comet</a>, the camera doesn't sit still — it picks
+     an orb on the rotating starfield and drifts toward where that orb will be
+     when it crosses the camera plane. The orb dies, a new one is picked, and
+     the camera replans. The chase happens entirely in x/y (orbs handle the z),
+     so this lab strips it down to a top-down 2D view: same target motion as
+     comet, same chase model, no perspective distractions.</p>
+  <p>Four panes run the chase model side-by-side at different
+     <code>chase</code> values so you can see how aggressively the camera
+     commits to the predicted death point.
+     <span style="color:#9cf">Target</span> orbits;
+     <span style="color:#fc9">camera</span> chases.</p>
+
+  <h2>panes</h2>
+  <div class="panes" id="panes"></div>
+  <div class="legend">
+    <span><span class="swatch" style="background:#9cf"></span>target</span>
+    <span><span class="swatch" style="background:rgba(156,204,255,0.5);box-shadow:inset 0 0 0 1px #9cf"></span>predicted death point</span>
+    <span><span class="swatch" style="background:rgba(252,153,102,0.5)"></span>trust point (pane's aim)</span>
+    <span><span class="swatch" style="background:#fc9"></span>camera</span>
+  </div>
+
+  <h2>controls</h2>
+  <div class="controls">
+    <span class="label">spin (rad/s)</span>
+    <div class="slider-row">
+      <input type="range" id="spin" min="0" max="2" step="0.05" value="0.5">
+      <span class="num" id="spin-val">0.50</span>
+    </div>
+
+    <span class="label">target lifetime (s)</span>
+    <div class="slider-row">
+      <input type="range" id="lifetime" min="1" max="4" step="0.5" value="4">
+      <span class="num" id="lifetime-val">4.0</span>
+    </div>
+
+    <span class="label">ramp (trapezoid shape)</span>
+    <div class="slider-row">
+      <input type="range" id="ramp" min="0" max="0.5" step="0.025" value="0.25">
+      <span class="num" id="ramp-val">0.25</span>
+    </div>
+
+    <span class="label"></span>
+    <div class="actions">
+      <button class="opt" id="pause">pause</button>
+      <button class="opt" id="step">step</button>
+    </div>
+  </div>
+
+  <div class="notes">
+    <p><strong>chase model:</strong> on each target handoff, the camera plans a
+       trapezoidal-eased trajectory from its current position to a "trust point"
+       <code>= target + (deathPoint − target) × chase</code>, executed over the
+       target's remaining lifetime. Camera arrives at the trust point precisely
+       when the target dies.</p>
+    <p>chase = 1.0: fully commits to the predicted death point — locks on at end-of-life.<br>
+       chase = 0.5: lands halfway between current target position and predicted death.<br>
+       chase = 0.2: barely deviates from where it was; minimal anticipation.<br>
+       chase = 0.0: no chase; camera decays back to origin.</p>
+    <p><strong>ramp:</strong> trapezoidal shape. 0 = pure linear (constant velocity, hard
+       starts/stops). 0.25 = ¼ ramp-up, ½ cruise, ¼ ramp-down. 0.5 = degenerates to smoothstep
+       (no constant middle).</p>
+    <p><strong>target motion</strong> mirrors the actual chase target in
+       <a href="../comet/">comet</a>: a point on a fixed circle of random
+       radius, rotating at <code>spin</code>, with a finite lifetime. On
+       expiry, a new (radius, base angle) is picked.</p>
+  </div>
+
+<script>
+'use strict';
+
+// --- easing -------------------------------------------------------------
+// Trapezoidal motion profile: linear ramp-up, constant cruise, linear ramp-down.
+// `ramp` is the fraction of t spent on each ramp (0..0.5).
+function trapezoidEase(t, ramp) {
+  if (ramp <= 0) return Math.max(0, Math.min(1, t));
+  if (ramp >= 0.5) return t * t * (3 - 2 * t);  // degenerates to smoothstep
+  const norm = 1 - ramp;
+  if (t < ramp) {
+    return (t * t) / (2 * ramp) / norm;
+  } else if (t < 1 - ramp) {
+    return (ramp / 2 + (t - ramp)) / norm;
+  } else {
+    const u = 1 - t;
+    return 1 - (u * u) / (2 * ramp) / norm;
+  }
+}
+
+// --- simulator ----------------------------------------------------------
+// Single chase model: at each target handoff, plan a trapezoidal trajectory
+// from the camera's current position to a "trust point" between the live
+// target and its predicted death point. Camera follows the plan exactly,
+// arriving at the trust point precisely when the target dies.
+//
+//   trust point = current_target + (death_point − current_target) × chase
+//
+// chase = how much to commit to the prediction (a "trust" slider).
+// ramp  = trapezoidal shape (0 = pure linear, 0.5 = pure smoothstep).
+class Sim {
+  constructor(chase) {
+    this.chase = chase;
+    this.cx = 0; this.cy = 0;
+    this.trail = [];
+
+    // Current trajectory plan
+    this.planStartX = 0; this.planStartY = 0;
+    this.planAimX   = 0; this.planAimY   = 0;
+    this.planStartT = 0;
+    this.planDuration = 1;
+    this.lastDeathSig = '';
+    this.lastReplanT  = -999;
+  }
+
+  reset() {
+    this.cx = 0; this.cy = 0;
+    this.trail.length = 0;
+    this.lastDeathSig = '';
+    this.lastReplanT  = -999;
+  }
+
+  step(dt, target, simT, ramp) {
+    // chase=0 → no chase, just decay toward origin.
+    if (this.chase <= 0) {
+      const decay = Math.exp(-1.5 * dt);
+      this.cx *= decay;
+      this.cy *= decay;
+      this.trail.push([this.cx, this.cy]);
+      if (this.trail.length > 240) this.trail.shift();
+      return;
+    }
+
+    // Decide whether to (re)plan. Trigger on a target switch (death point
+    // changes) or, for motions without a deadline, every few seconds.
+    const hasDeadline = (target.deathX !== undefined &&
+                        target.tDeath !== undefined && isFinite(target.tDeath));
+    let needPlan = false;
+    if (hasDeadline) {
+      const sig = `${target.deathX.toFixed(1)},${target.deathY.toFixed(1)}`;
+      if (sig !== this.lastDeathSig) {
+        needPlan = true;
+        this.lastDeathSig = sig;
+      }
+    } else {
+      if (simT - this.lastReplanT >= 3) needPlan = true;
+    }
+
+    if (needPlan) {
+      this.planStartX = this.cx;
+      this.planStartY = this.cy;
+      this.planStartT = simT;
+      this.lastReplanT = simT;
+      const dx = hasDeadline ? target.deathX : target.x + target.vx * 1.5;
+      const dy = hasDeadline ? target.deathY : target.y + target.vy * 1.5;
+      this.planAimX = target.x + (dx - target.x) * this.chase;
+      this.planAimY = target.y + (dy - target.y) * this.chase;
+      this.planDuration = hasDeadline
+        ? Math.max(0.3, target.tDeath)
+        : 3.0;
+    }
+
+    const elapsed = simT - this.planStartT;
+    const t = Math.min(1, elapsed / Math.max(0.001, this.planDuration));
+    const eased = trapezoidEase(t, ramp);
+    this.cx = this.planStartX + (this.planAimX - this.planStartX) * eased;
+    this.cy = this.planStartY + (this.planAimY - this.planStartY) * eased;
+
+    this.trail.push([this.cx, this.cy]);
+    if (this.trail.length > 240) this.trail.shift();
+  }
+
+  delta(target) {
+    const dx = target.x - this.cx;
+    const dy = target.y - this.cy;
+    return Math.hypot(dx, dy);
+  }
+}
+
+// --- target motion ------------------------------------------------------
+// Stateful target: an orb on a fixed circle of random radius that rotates
+// at `spin` rad/s, with a finite lifetime. On expiry, a new (radius, base
+// angle) is picked — modeling comet's chase-target switch when an orb
+// crosses z=0. The true future-on-circle position is reported as the death
+// point (not a linear velocity extrapolation).
+const cometChaseState = { active: false, startT: 0, baseAngle: 0, radius: 0, duration: 5 };
+function targetCometChase(t, spin, lifetime) {
+  if (!cometChaseState.active || (t - cometChaseState.startT) >= cometChaseState.duration) {
+    cometChaseState.active = true;
+    cometChaseState.startT = t;
+    cometChaseState.baseAngle = Math.random() * Math.PI * 2;
+    cometChaseState.radius = 30 + Math.random() * 50;  // 30..80
+    cometChaseState.duration = lifetime;
+  }
+  const age = t - cometChaseState.startT;
+  const r = cometChaseState.radius;
+  const angle = cometChaseState.baseAngle + spin * age;
+  const deathAngle = cometChaseState.baseAngle + spin * cometChaseState.duration;
+  return {
+    x: r * Math.cos(angle),
+    y: r * Math.sin(angle),
+    vx: -r * spin * Math.sin(angle),
+    vy:  r * spin * Math.cos(angle),
+    tDeath: cometChaseState.duration - age,
+    deathX: r * Math.cos(deathAngle),
+    deathY: r * Math.sin(deathAngle),
+  };
+}
+
+// --- target trail (shared across panes; cleared on handoff) ------------
+const targetTrail = [];
+let targetTrailLifeStartT = -1;
+function recordTargetTrail(target) {
+  if (cometChaseState.startT !== targetTrailLifeStartT) {
+    targetTrail.length = 0;
+    targetTrailLifeStartT = cometChaseState.startT;
+  }
+  targetTrail.push([target.x, target.y]);
+  if (targetTrail.length > 240) targetTrail.shift();
+}
+
+// --- rendering ----------------------------------------------------------
+function drawPane(canvas, sim, target) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // World coords ±100 fit within canvas.
+  const scale = (Math.min(w, h) / 2) / 100;
+  const cx = w / 2, cy = h / 2;
+  const sx = (x) => cx + x * scale;
+  const sy = (y) => cy + y * scale;
+
+  // crosshair
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, 0); ctx.lineTo(cx, h);
+  ctx.moveTo(0, cy); ctx.lineTo(w, cy);
+  ctx.stroke();
+
+  // target trail (shared across panes)
+  if (targetTrail.length > 1) {
+    ctx.strokeStyle = 'rgba(156, 204, 255, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx(targetTrail[0][0]), sy(targetTrail[0][1]));
+    for (let i = 1; i < targetTrail.length; i++) {
+      ctx.lineTo(sx(targetTrail[i][0]), sy(targetTrail[i][1]));
+    }
+    ctx.stroke();
+  }
+
+  // camera trail
+  if (sim.trail.length > 1) {
+    ctx.strokeStyle = 'rgba(252, 153, 102, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx(sim.trail[0][0]), sy(sim.trail[0][1]));
+    for (let i = 1; i < sim.trail.length; i++) {
+      ctx.lineTo(sx(sim.trail[i][0]), sy(sim.trail[i][1]));
+    }
+    ctx.stroke();
+  }
+
+  // delta line
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(sx(sim.cx), sy(sim.cy));
+  ctx.lineTo(sx(target.x), sy(target.y));
+  ctx.stroke();
+
+  // death-point ghost (only for motion types that have one)
+  if (target.deathX !== undefined && target.deathY !== undefined &&
+      (target.deathX !== target.x || target.deathY !== target.y)) {
+    ctx.strokeStyle = 'rgba(156, 204, 255, 0.25)';
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx(target.x), sy(target.y));
+    ctx.lineTo(sx(target.deathX), sy(target.deathY));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = 'rgba(156, 204, 255, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(sx(target.deathX), sy(target.deathY), 4, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // trust point — where this pane is actually heading (target + chase * (death - target))
+  if (sim.chase > 0) {
+    ctx.fillStyle = 'rgba(252, 153, 102, 0.5)';
+    ctx.beginPath();
+    ctx.arc(sx(sim.planAimX), sy(sim.planAimY), 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // target dot
+  ctx.fillStyle = '#9cf';
+  ctx.beginPath();
+  ctx.arc(sx(target.x), sy(target.y), 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // camera dot
+  ctx.fillStyle = '#fc9';
+  ctx.beginPath();
+  ctx.arc(sx(sim.cx), sy(sim.cy), 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// --- ui scaffolding -----------------------------------------------------
+const CHASE_VALUES = [0.2, 0.5, 0.85, 1.0];
+const sims = CHASE_VALUES.map((c) => new Sim(c));
+
+const panesEl = document.getElementById('panes');
+const paneCanvases = [];
+const paneDeltas = [];
+sims.forEach((sim) => {
+  const pane = document.createElement('div');
+  pane.className = 'pane';
+  const canvas = document.createElement('canvas');
+  canvas.width = 320; canvas.height = 320;
+  pane.appendChild(canvas);
+
+  const label = document.createElement('div');
+  label.className = 'pane-label';
+  const chaseSpan = document.createElement('span');
+  chaseSpan.className = 'chase-val';
+  chaseSpan.textContent = `chase = ${sim.chase.toFixed(2)}`;
+  const deltaSpan = document.createElement('span');
+  deltaSpan.className = 'delta-val';
+  label.appendChild(chaseSpan);
+  label.appendChild(deltaSpan);
+  pane.appendChild(label);
+
+  panesEl.appendChild(pane);
+  paneCanvases.push(canvas);
+  paneDeltas.push(deltaSpan);
+});
+
+// State
+const state = {
+  spin: 0.5,
+  lifetime: 4,
+  ramp: 0.25,
+  paused: false,
+  pendingStep: false,
+};
+const STEP_DT = 0.25;
+
+// Sliders
+function bindSlider(id, key, fmt) {
+  const el = document.getElementById(id);
+  const out = document.getElementById(id + '-val');
+  const update = () => {
+    state[key] = parseFloat(el.value);
+    out.textContent = fmt(state[key]);
+  };
+  el.addEventListener('input', update);
+  update();
+}
+bindSlider('spin',     'spin',     (v) => v.toFixed(2));
+bindSlider('lifetime', 'lifetime', (v) => v.toFixed(1));
+bindSlider('ramp',     'ramp',     (v) => v.toFixed(2));
+
+const pauseBtn = document.getElementById('pause');
+pauseBtn.addEventListener('click', () => {
+  state.paused = !state.paused;
+  pauseBtn.textContent = state.paused ? 'resume' : 'pause';
+});
+document.getElementById('step').addEventListener('click', () => {
+  if (!state.paused) {
+    state.paused = true;
+    pauseBtn.textContent = 'resume';
+  }
+  state.pendingStep = true;
+});
+
+// --- loop ---------------------------------------------------------------
+let lastT = performance.now();
+let simT = 0;
+function loop(now) {
+  const realDt = Math.min((now - lastT) / 1000, 0.05);
+  lastT = now;
+
+  let dt = 0;
+  if (!state.paused) dt = realDt;
+  else if (state.pendingStep) { dt = STEP_DT; state.pendingStep = false; }
+
+  simT += dt;
+  const target = targetCometChase(simT, state.spin, state.lifetime);
+
+  if (dt > 0) {
+    recordTargetTrail(target);
+    sims.forEach((s) => s.step(dt, target, simT, state.ramp));
+  }
+
+  sims.forEach((s, i) => {
+    drawPane(paneCanvases[i], s, target);
+    paneDeltas[i].textContent = `Δ ${s.delta(target).toFixed(0)}`;
+  });
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// Dev-only live reload.
+if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+  let last = null;
+  setInterval(async () => {
+    try {
+      const r = await fetch('index.html', { method: 'HEAD', cache: 'no-store' });
+      const m = r.headers.get('last-modified');
+      if (last && m && m !== last) location.reload();
+      if (m) last = m;
+    } catch (e) {}
+  }, 800);
+}
+</script>
+</body>
+</html>
