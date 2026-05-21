@@ -51,7 +51,7 @@
     hideTimer = setTimeout(() => hint.classList.remove('show'), ms);
   }
 
-  function toggleFullscreen() {
+  window.toggleFullscreen = function () {
     const el = document.documentElement;
     const inFs = document.fullscreenElement || document.webkitFullscreenElement;
     if (!inFs) {
@@ -59,15 +59,15 @@
     } else {
       (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
     }
-  }
+  };
 
   document.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'INPUT') return;
-    if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+    if (e.key === 'f' || e.key === 'F') window.toggleFullscreen();
     else if (e.key === '?') flashHint();
   });
 
-  document.addEventListener('dblclick', toggleFullscreen);
+  document.addEventListener('dblclick', window.toggleFullscreen);
 
   flashHint();
 })();

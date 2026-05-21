@@ -91,7 +91,9 @@ const BASE_CSS = `
 
 const PANEL_CSS = `
   #drawer {
-    position: fixed; top: 0; left: 0; height: 100vh; width: 280px;
+    position: fixed; top: 0; left: 0;
+    height: 100vh; height: 100dvh; /* dvh trims iPad URL bar so drawer fits */
+    width: 280px;
     background: rgba(10, 12, 18, 0.55);
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     color: #ddd;
@@ -121,7 +123,11 @@ const PANEL_CSS = `
 
   #drawer-content {
     padding: 1.25rem 1.4rem; overflow-y: auto; height: 100%; box-sizing: border-box;
+    overscroll-behavior: contain;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent;
   }
+  #drawer-content::-webkit-scrollbar { width: 6px; }
+  #drawer-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 3px; }
   #drawer-content h1 { font-size: 14px; font-weight: 500; letter-spacing: 0.04em; margin: 0 0 1rem; color: #fff; }
   #drawer-content h1 small { font-weight: 400; color: #888; margin-left: 0.4em; font-size: 11px; }
   #drawer-content h2 { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em; margin: 1.4rem 0 0.5rem; color: #888; }
@@ -212,6 +218,7 @@ const PANEL_HTML = `
         <button class="kbd kbd-action" data-action="lerp">L</button><div class="kbd-desc">lerp (preset cycle)</div>
         <button class="kbd kbd-action" data-action="reset">R</button><div class="kbd-desc">reset molds</div>
         <button class="kbd kbd-action" data-action="copy">C</button><div class="kbd-desc" id="copy-desc">copy screensaver URL</div>
+        <button class="kbd kbd-action" data-action="fullscreen">F</button><div class="kbd-desc">fullscreen</div>
         <button class="kbd kbd-action" data-action="hide">H</button><div class="kbd-desc">hide / show panel</div>
       </div>
     </div>
@@ -565,11 +572,12 @@ function setupDom() {
     const el = e.target.closest('[data-action]');
     if (!el) return;
     const a = el.dataset.action;
-    if      (a === 'drift') toggleDrift();
-    else if (a === 'lerp')  toggleLerp();
-    else if (a === 'reset') resetMolds();
-    else if (a === 'copy')  copyShareUrl();
-    else if (a === 'hide')  toggleDrawer();
+    if      (a === 'drift')      toggleDrift();
+    else if (a === 'lerp')       toggleLerp();
+    else if (a === 'reset')      resetMolds();
+    else if (a === 'copy')       copyShareUrl();
+    else if (a === 'fullscreen') window.toggleFullscreen?.();
+    else if (a === 'hide')       toggleDrawer();
     else return;
     el.blur();
   });
