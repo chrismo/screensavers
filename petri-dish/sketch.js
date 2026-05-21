@@ -496,26 +496,39 @@ function copyShareUrl() {
   }).catch(() => {});
 }
 
-function keyPressed() {
-  if      (keyCode === LEFT_ARROW)  adjustParam('rotAngle', -1);
-  else if (keyCode === RIGHT_ARROW) adjustParam('rotAngle', +1);
-  else if (keyCode === UP_ARROW)    adjustParam('sensorAngle', +1);
-  else if (keyCode === DOWN_ARROW)  adjustParam('sensorAngle', -1);
-  else if (key === '[')             adjustParam('sensorDist', -1);
-  else if (key === ']')             adjustParam('sensorDist', +1);
-  else if (key === '-')             adjustParam('moldSpeed', -1);
-  else if (key === '=')             adjustParam('moldSpeed', +1);
-  else if (key === ',')             adjustParam('bgFade', -1);
-  else if (key === '.')             adjustParam('bgFade', +1);
-  else if (key === 'd' || key === 'D') toggleDrift();
-  else if (key === 'l' || key === 'L') toggleLerp();
-  else if (key === 'r' || key === 'R') resetMolds();
-  else if (key === 'c' || key === 'C') copyShareUrl();
-  else if (key === 'h' || key === 'H') toggleDrawer();
-  else if (key >= '0' && key <= '9')   pickPreset((Number(key) + 9) % 10);
+// Native keydown rather than p5's keyPressed so the browser's built-in
+// key-repeat fires on held keys for the adjust shortcuts. Non-adjust keys
+// (toggles, reset, preset) are gated on e.repeat so holding R doesn't
+// reset 30×/sec.
+window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement) return;
+  const isAdjust = (
+    e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+    e.key === 'ArrowUp'   || e.key === 'ArrowDown' ||
+    e.key === '[' || e.key === ']' ||
+    e.key === '-' || e.key === '=' ||
+    e.key === ',' || e.key === '.'
+  );
+  if (e.repeat && !isAdjust) return;
+  if      (e.key === 'ArrowLeft')  adjustParam('rotAngle', -1);
+  else if (e.key === 'ArrowRight') adjustParam('rotAngle', +1);
+  else if (e.key === 'ArrowUp')    adjustParam('sensorAngle', +1);
+  else if (e.key === 'ArrowDown')  adjustParam('sensorAngle', -1);
+  else if (e.key === '[')          adjustParam('sensorDist', -1);
+  else if (e.key === ']')          adjustParam('sensorDist', +1);
+  else if (e.key === '-')          adjustParam('moldSpeed', -1);
+  else if (e.key === '=')          adjustParam('moldSpeed', +1);
+  else if (e.key === ',')          adjustParam('bgFade', -1);
+  else if (e.key === '.')          adjustParam('bgFade', +1);
+  else if (e.key === 'd' || e.key === 'D') toggleDrift();
+  else if (e.key === 'l' || e.key === 'L') toggleLerp();
+  else if (e.key === 'r' || e.key === 'R') resetMolds();
+  else if (e.key === 'c' || e.key === 'C') copyShareUrl();
+  else if (e.key === 'h' || e.key === 'H') toggleDrawer();
+  else if (e.key >= '0' && e.key <= '9') pickPreset((Number(e.key) + 9) % 10);
   else return;
-  return false;
-}
+  e.preventDefault();
+});
 
 // --- DOM panel ------------------------------------------------------------
 function setupDom() {
@@ -547,18 +560,39 @@ function setupDom() {
   // Delegated click dispatch for tap UI: every actionable control carries
   // data-action. Keeps the JS in one place and keeps the keyboard +
   // tap paths sharing the same handlers.
-  document.getElementById('drawer-content').addEventListener('click', (e) => {
+  const drawerContent = document.getElementById('drawer-content');
+  drawerContent.addEventListener('click', (e) => {
     const el = e.target.closest('[data-action]');
     if (!el) return;
     const a = el.dataset.action;
-    if (a === 'adjust') adjustParam(el.dataset.param, Number(el.dataset.dir));
-    else if (a === 'drift') toggleDrift();
+    if      (a === 'drift') toggleDrift();
     else if (a === 'lerp')  toggleLerp();
     else if (a === 'reset') resetMolds();
     else if (a === 'copy')  copyShareUrl();
     else if (a === 'hide')  toggleDrawer();
+    else return;
     el.blur();
   });
+
+  // Hold an adjust button to auto-repeat — mirrors browser key-repeat on
+  // held arrow/bracket keys. Fires once on pointerdown, then after a 350ms
+  // delay starts ticking every 60ms.
+  let holdDelay, holdInterval;
+  function stopHold() { clearTimeout(holdDelay); clearInterval(holdInterval); }
+  drawerContent.addEventListener('pointerdown', (e) => {
+    const el = e.target.closest('[data-action="adjust"]');
+    if (!el) return;
+    e.preventDefault();
+    const param = el.dataset.param;
+    const dir = Number(el.dataset.dir);
+    adjustParam(param, dir);
+    el.setPointerCapture?.(e.pointerId);
+    holdDelay = setTimeout(() => {
+      holdInterval = setInterval(() => adjustParam(param, dir), 60);
+    }, 350);
+  });
+  drawerContent.addEventListener('pointerup', stopHold);
+  drawerContent.addEventListener('pointercancel', stopHold);
 }
 
 function toggleDrawer() {

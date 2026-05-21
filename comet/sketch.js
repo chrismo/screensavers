@@ -563,17 +563,38 @@ function setupDom() {
   });
 
   // Delegated click dispatch — every actionable control carries data-action.
-  document.getElementById('drawer-content').addEventListener('click', (e) => {
+  const drawerContent = document.getElementById('drawer-content');
+  drawerContent.addEventListener('click', (e) => {
     const el = e.target.closest('[data-action]');
     if (!el) return;
     const a = el.dataset.action;
-    if      (a === 'adjust') adjustParam(el.dataset.param, Number(el.dataset.dir));
-    else if (a === 'reset')  resetOrbs();
-    else if (a === 'copy')   copyShareUrl();
+    if      (a === 'reset')    resetOrbs();
+    else if (a === 'copy')     copyShareUrl();
     else if (a === 'approach') toggleApproach();
-    else if (a === 'hide')   toggleDrawer();
+    else if (a === 'hide')     toggleDrawer();
+    else return;
     el.blur();
   });
+
+  // Hold an adjust button to auto-repeat — mirrors browser key-repeat on
+  // held arrow/bracket keys. Fires once on pointerdown, then after a 350ms
+  // delay starts ticking every 60ms.
+  let holdDelay, holdInterval;
+  function stopHold() { clearTimeout(holdDelay); clearInterval(holdInterval); }
+  drawerContent.addEventListener('pointerdown', (e) => {
+    const el = e.target.closest('[data-action="adjust"]');
+    if (!el) return;
+    e.preventDefault();
+    const param = el.dataset.param;
+    const dir = Number(el.dataset.dir);
+    adjustParam(param, dir);
+    el.setPointerCapture?.(e.pointerId);
+    holdDelay = setTimeout(() => {
+      holdInterval = setInterval(() => adjustParam(param, dir), 60);
+    }, 350);
+  });
+  drawerContent.addEventListener('pointerup', stopHold);
+  drawerContent.addEventListener('pointercancel', stopHold);
 
   // Custom tooltip — appears to the right of the drawer, matching the same
   // smoky-glass aesthetic. Single shared element, repositioned on hover.
@@ -619,6 +640,17 @@ function updateDom() {
 window.addEventListener('keydown', (e) => {
   // Don't intercept if user is typing in an input (none yet, but defensive).
   if (e.target instanceof HTMLInputElement) return;
+  // Browser auto-repeats keydown when held. Allow that for adjust shortcuts
+  // (arrows, brackets, , .) but suppress it for toggles, reset, and preset
+  // selection — otherwise holding R rapid-fires resetOrbs and holding A
+  // strobes approach on/off.
+  const isAdjust = (
+    e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+    e.key === 'ArrowUp'   || e.key === 'ArrowDown' ||
+    e.key === '[' || e.key === ']' ||
+    e.key === ',' || e.key === '.'
+  );
+  if (e.repeat && !isAdjust) return;
   if      (e.key === 'ArrowLeft')  adjustParam('speed', -1);
   else if (e.key === 'ArrowRight') adjustParam('speed', +1);
   else if (e.key === 'ArrowDown')  adjustParam('radius', -1);
