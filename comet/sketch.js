@@ -405,6 +405,7 @@ function resetOrbs() {
     sprites[i].position.z = -depth + Math.random() * (Z_NEAR + depth);
   }
   targetIdx = -1;
+  window.flashToast?.('reset');
 }
 
 // --- presets and adjustment --------------------------------------------
@@ -426,10 +427,12 @@ function applyPreset(i) {
 
 function toggleApproach() {
   playApproach = !playApproach;
+  window.flashToast?.(`approach ${playApproach ? 'on' : 'off'}`);
 }
 
 function pickPreset(i) {
   applyPreset(i);
+  window.flashToast?.(`preset ${(i + 1) % 10}: ${presets[i].name}`);
 }
 
 function adjustParam(name, dir) {
@@ -440,6 +443,19 @@ function adjustParam(name, dir) {
   else if (name === 'depth')  depth  = clamp(30,  300, depth  + dir * stepDepth);
   else if (name === 'spin')   spin   = clamp(0,    2,  spin   + dir * stepSpin);
   else if (name === 'chase')  chase  = clamp(0,    2,  chase  + dir * stepChase);
+  toastParam(name);
+}
+
+function toastParam(name) {
+  let msg;
+  if      (name === 'num')    msg = `num ${num}`;
+  else if (name === 'speed')  msg = `speed ${speed.toFixed(1)}`;
+  else if (name === 'radius') msg = `radius ${radius.toFixed(0)}`;
+  else if (name === 'depth')  msg = `depth ${depth.toFixed(0)}`;
+  else if (name === 'spin')   msg = `spin ${spin.toFixed(2)}`;
+  else if (name === 'chase')  msg = `chase ${chase.toFixed(2)}`;
+  else return;
+  window.flashToast?.(msg);
 }
 
 // --- copy URL ----------------------------------------------------------
@@ -638,12 +654,20 @@ const grabFocus = () => document.body.focus();
 grabFocus();
 window.addEventListener('pageshow', grabFocus);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') grabFocus();
+  if (document.visibilityState !== 'visible') return;
+  grabFocus();
+  // Re-arm dt and kick the loop in case it stopped while hidden.
+  last = performance.now();
+  if (!ticking) { ticking = true; requestAnimationFrame(tick); }
 });
 
 // --- main loop ---------------------------------------------------------
 let last = performance.now();
+let ticking = true;
 function tick(now) {
+  // Pause cleanly while the tab is hidden — the visibilitychange handler
+  // will re-arm `last` and re-kick RAF on return so dt doesn't spike.
+  if (document.hidden) { ticking = false; return; }
   const dt = Math.min((now - last) / 1000, MAX_DT);
   last = now;
 

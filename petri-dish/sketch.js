@@ -399,11 +399,26 @@ function adjustParam(name, dir) {
   else if (name === 'bgFade')      bgFade       = dir < 0 ? max(1, bgFade - fadeStep) : bgFade + fadeStep;
   else if (name === 'lerpDuration') lerpDuration = dir < 0 ? max(60, lerpDuration - lerpDurationStep) : lerpDuration + lerpDurationStep;
   else if (name === 'driftSpeed')   driftSpeed   = dir < 0 ? max(0.0005, driftSpeed - driftSpeedStep) : driftSpeed + driftSpeedStep;
+  toastParam(name);
+}
+
+function toastParam(name) {
+  let msg;
+  if      (name === 'rotAngle')     msg = `rotAngle ${nf(rotAngle, 1, 1)}°`;
+  else if (name === 'sensorAngle')  msg = `sensorAngle ${nf(sensorAngle, 1, 1)}°`;
+  else if (name === 'sensorDist')   msg = `sensorDist ${nf(sensorDist, 1, 1)}px`;
+  else if (name === 'moldSpeed')    msg = `moldSpeed ${nf(moldSpeed, 1, 2)}×`;
+  else if (name === 'bgFade')       msg = `bgFade ${nf(bgFade, 1, 1)}`;
+  else if (name === 'lerpDuration') msg = `lerpDuration ${nf(lerpDuration / 60, 1, 1)}s`;
+  else if (name === 'driftSpeed')   msg = `driftSpeed ${nf(driftSpeed, 1, 4)}`;
+  else return;
+  window.flashToast?.(msg);
 }
 
 function toggleDrift() {
   drift = !drift;
   if (drift) lerpMode = false;
+  window.flashToast?.(`drift ${drift ? 'on' : 'off'}`);
 }
 
 function toggleLerp() {
@@ -414,11 +429,13 @@ function toggleLerp() {
     lerpTo = (presetIdx + 1) % presets.length;
     lerpT = 0;
   }
+  window.flashToast?.(`lerp ${lerpMode ? 'on' : 'off'}`);
 }
 
 function resetMolds() {
   for (let i = 0; i < num; i++) molds[i] = new Mold();
   background(0);
+  window.flashToast?.('reset');
 }
 
 function pickPreset(i) {
@@ -428,6 +445,7 @@ function pickPreset(i) {
     lerpTo = (i + 1) % presets.length;
     lerpT = 0;
   }
+  window.flashToast?.(`preset ${(i + 1) % 10}: ${presets[i].name}`);
 }
 
 // Build a screensaver-friendly URL that reproduces the current panel state
@@ -667,3 +685,12 @@ class Mold {
     sensor.y = (this.y + sensorDist * sin(angle) + height) % height;
   }
 }
+
+// Pause the draw loop while the tab is hidden. Browsers already throttle RAF
+// when hidden, but stopping outright also halts the GPU work and lets the
+// pattern resume from exactly where it was on return.
+document.addEventListener('visibilitychange', () => {
+  if (typeof noLoop !== 'function') return;
+  if (document.hidden) noLoop();
+  else loop();
+});
