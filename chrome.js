@@ -1,4 +1,4 @@
-// Shared sketch chrome: fullscreen toggle (F or double-click) + fading hint.
+// Shared sketch chrome: fullscreen toggle (F) + fading hint.
 // Designed to drop into any sketch via <script src="../chrome.js"></script>.
 (() => {
   const style = document.createElement('style');
@@ -66,8 +66,6 @@
     if (e.key === 'f' || e.key === 'F') window.toggleFullscreen();
     else if (e.key === '?') flashHint();
   });
-
-  document.addEventListener('dblclick', window.toggleFullscreen);
 
   flashHint();
 })();
