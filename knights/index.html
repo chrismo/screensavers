@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Knights — spiral coloring</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0a0b10; overflow: hidden; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <script src="sketch.js"></script>
+  <script src="../chrome.js"></script>
+  <script>
+    // Dev-only live reload: on localhost, poll sketch.js's Last-Modified
+    // and refresh the page when it changes. Skipped on GitHub Pages.
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      let last = null;
+      setInterval(async () => {
+        try {
+          const r = await fetch('sketch.js', { method: 'HEAD', cache: 'no-store' });
+          const m = r.headers.get('last-modified');
+          if (last && m && m !== last) location.reload();
+          if (m) last = m;
+        } catch (e) {}
+      }, 800);
+    }
+  </script>
+</body>
+</html>

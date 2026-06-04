@@ -12,6 +12,11 @@ canonical autoplay form for screensaver use adds `?nopanel=1&lerp=1`
   simulation. See [petri-dish/README.md](petri-dish/README.md) for
   controls, presets, and supported URL params.
   Live: https://chrismo.github.io/screensavers/petri-dish/
+- [knights/](knights/) — spiral knight-coloring that zooms out from the
+  center to reveal the emergent large-scale pattern (after Numberphile's
+  "Red & Black Knights"). See [knights/README.md](knights/README.md) for
+  controls and URL params.
+  Live: https://chrismo.github.io/screensavers/knights/
 
 ## Running as a screensaver / desktop
 
