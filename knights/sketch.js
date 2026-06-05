@@ -41,8 +41,8 @@
 // 5. True construction-order animation (OEIS A395355): instead of the spiral
 //    sweep, replay the actual turn-based placement — K interleaved cursors
 //    jumping around. Jumpier but "how it's really built." Pairs with idea 2.
-// 6. Roster auto-cycle: rotate through pieces/colors/palettes each loop for
-//    long-idle variety (off by default; first entry = 3-color knight).
+// 6. [DONE] Preset cycling: rotate to the next preset when each run finishes
+//    (the `cycle` toggle / `L` key / ?cycle=1). Off by default.
 // 7. 1-color independent-set variant (OEIS A308885): place a knight only if
 //    the cell isn't attacked by an EXISTING knight (no same-color attacks) —
 //    a different, sparser pattern. Separate small code path.
@@ -59,6 +59,7 @@ let zoomSec = 90;        // seconds for a full zoom-out
 let paletteIdx = 0;      // index into PALETTES
 let reveal  = 'spiral';  // reveal mode: 'spiral' | 'square' | 'all'
 let startPhase = 0;      // initial zoom phase 0..1 (URL `start`; resume mid-zoom)
+let cyclePresets = false; // rotate to the next preset when a run finishes
 
 // --- internal constants -------------------------------------------------
 const H0 = 0.5;          // starting half-window (cells) — one center cell
@@ -414,6 +415,8 @@ function advance(dt) {
     fade = 1 - Math.min(stateT / FADE_SEC, 1);
     if (stateT >= FADE_SEC) {
       fade = 0; phase = 0; state = 'fadein'; stateT = 0;
+      // Run finished: while fully black, swap to the next preset if cycling.
+      if (cyclePresets) gotoNextPreset();
     }
   } else if (state === 'fadein') {
     stateT += dt; phase = 0;
@@ -539,6 +542,7 @@ const PANEL_HTML = `
       <div id="v-preset-pills" class="preset-pills"></div>
       <h2>actions</h2>
       <div class="legend">
+        <button class="kbd" data-action="cycle">L</button><div class="kbd-desc">cycle presets: <span id="v-cycle" style="color:#9cf">off</span></div>
         <button class="kbd" data-action="restart">R</button><div class="kbd-desc">restart zoom</div>
         <button class="kbd" data-action="copy">C</button><div class="kbd-desc" id="copy-desc">copy screensaver URL</div>
         <button class="kbd" data-action="fullscreen">F</button><div class="kbd-desc">fullscreen</div>
@@ -570,6 +574,7 @@ function buildPanel() {
   dom.palette = document.getElementById('v-palette');
   dom.preset = document.getElementById('v-preset');
   dom.presetPills = document.getElementById('v-preset-pills');
+  dom.cycle = document.getElementById('v-cycle');
 
   for (let i = 0; i < presets.length; i++) {
     const pill = document.createElement('button');
@@ -588,6 +593,7 @@ function buildPanel() {
     if (!el) return;
     const a = el.dataset.action;
     if (a === 'restart') restart();
+    else if (a === 'cycle') toggleCycle();
     else if (a === 'copy') copyShareUrl();
     else if (a === 'fullscreen') window.toggleFullscreen?.();
     else if (a === 'hide') toggleDrawer();
@@ -641,6 +647,7 @@ function updateDom() {
   dom.zoom.textContent = `${zoomSec}s`;
   dom.palette.textContent = curPalette().name;
   dom.preset.textContent = presets[presetIdx] ? presets[presetIdx].name : '—';
+  if (dom.cycle) dom.cycle.textContent = cyclePresets ? 'on' : 'off';
   for (let i = 0; i < dom.presetPills.children.length; i++) {
     dom.presetPills.children[i].classList.toggle('active', i === presetIdx);
   }
@@ -675,6 +682,22 @@ function syncPresetSelection() {
   if (dom.preset) updateDom();
 }
 
+// Advance to the next preset's pattern without resetting the fade/zoom state —
+// called at the black moment between runs when cycling is on.
+function gotoNextPreset() {
+  const i = presetIdx < 0 ? 0 : (presetIdx + 1) % presets.length;
+  const p = presets[i];
+  presetIdx = i;
+  piece = p.piece; colors = p.colors; paletteIdx = p.paletteIdx;
+  rebuild(false);
+}
+
+function toggleCycle() {
+  cyclePresets = !cyclePresets;
+  window.flashToast?.(`cycle presets ${cyclePresets ? 'on' : 'off'}`);
+  updateDom();
+}
+
 function restart() { phase = 0; state = 'zoom'; stateT = 0; fade = 1; }
 
 // --- URL params ---------------------------------------------------------
@@ -687,6 +710,7 @@ function applyUrlParams() {
   if (q.has('palette')) paletteIdx = (parseInt(q.get('palette'), 10) || 0) % PALETTES.length;
   if (q.has('reveal') && REVEAL_MODES.includes(q.get('reveal'))) reveal = q.get('reveal');
   if (q.has('start')) startPhase = Math.max(0, Math.min(1, parseFloat(q.get('start')) || 0));
+  if (q.get('cycle') === '1') cyclePresets = true;
 }
 
 function copyShareUrl() {
@@ -697,6 +721,7 @@ function copyShareUrl() {
   q.set('zoom', String(zoomSec));
   q.set('palette', String(paletteIdx));
   q.set('reveal', reveal);
+  if (cyclePresets) q.set('cycle', '1');
   q.set('nopanel', '1');
   const url = `${location.origin}${location.pathname}?${q.toString()}`;
   const done = (msg) => { window.flashToast?.(msg); const d = document.getElementById('copy-desc'); if (d) { const t = d.textContent; d.textContent = msg; setTimeout(() => (d.textContent = t), 1200); } };
@@ -715,6 +740,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'p' || e.key === 'P') adjustParam('piece', 1);
   else if (e.key === 'k' || e.key === 'K') adjustParam('palette', 1);
   else if (e.key === 'm' || e.key === 'M') adjustParam('reveal', 1);
+  else if (e.key === 'l' || e.key === 'L') toggleCycle();
   else if (e.key === 'r' || e.key === 'R') restart();
   else if (e.key === 'c' || e.key === 'C') copyShareUrl();
   else if (e.key === 'h' || e.key === 'H') toggleDrawer();

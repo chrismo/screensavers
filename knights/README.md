@@ -37,17 +37,18 @@ Open the drawer (the `›` tab on the left edge) to tune:
 | **reveal** | How cells appear: `spiral` (point sweeps the spiral with a glowing head), `square` (whole rings pop in), `all` (finished pattern, just zoomed). |
 | **zoom** | Seconds for one full zoom-out. |
 | **palette** | Color scheme. |
+| **cycle** (`L`) | When on, advance to the next preset each time a run finishes (rotating through the whole preset roster). |
 
 Keys: `←/→` zoom speed, `[ ]` extent, `P` cycle piece, `K` cycle palette, `M`
-cycle reveal mode, `1–9` presets, `R` restart zoom, `C` copy screensaver URL,
-`F` fullscreen, `H` hide panel.
+cycle reveal mode, `L` toggle preset cycling, `1–9` presets, `R` restart zoom,
+`C` copy screensaver URL, `F` fullscreen, `H` hide panel.
 
 ## URL params (for autoplay / screensaver use)
 
 `piece`, `colors`, `extent`, `zoom`, `palette`, `reveal`, `start`
-(initial zoom phase 0–1, to resume mid-sweep), and `nopanel=1` (hide the
-panel). `C` / *copy screensaver URL* builds a URL reproducing the current
-settings, e.g.:
+(initial zoom phase 0–1, to resume mid-sweep), `cycle=1` (rotate through
+presets), and `nopanel=1` (hide the panel). `C` / *copy screensaver URL*
+builds a URL reproducing the current settings, e.g.:
 
 `https://chrismo.github.io/screensavers/knights/?piece=knight&colors=3&extent=512&zoom=90&palette=0&reveal=spiral&nopanel=1`
 
