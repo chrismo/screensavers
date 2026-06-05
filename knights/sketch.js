@@ -87,6 +87,12 @@ const PIECES = {
 };
 const PIECE_NAMES = Object.keys(PIECES);
 
+// Display names for the persistent config label (e.g. "Knights ×2").
+const PIECE_LABEL = {
+  knight: 'Knights', camel: 'Camels', zebra: 'Zebras', antelope: 'Antelopes',
+  giraffe: 'Giraffes', fers: 'Fers', vazir: 'Vazirs',
+};
+
 // --- palettes (bg + up to 4 knight colors) ------------------------------
 const PALETTES = [
   { name: 'Ember', bg: [10, 11, 16], colors: [[232, 93, 63], [74, 163, 223], [150, 210, 90], [232, 193, 90]] },
@@ -362,6 +368,7 @@ function rebuild(resetAnim = true) {
   console.log(`[knights] ${piece} ×${colors}, S=${gridS} (${(2 * gridS + 1) ** 2} cells) simulated in ${lastSimMs.toFixed(1)}ms`);
   if (resetAnim) { phase = 0; state = 'zoom'; stateT = 0; fade = 1; }
   updateDom();
+  updateConfigLabel();
 }
 
 // --- canvas sizing ------------------------------------------------------
@@ -556,6 +563,30 @@ function injectCss(css) {
   const style = document.createElement('style');
   style.textContent = css;
   document.head.appendChild(style);
+}
+
+// Persistent config label (piece + color count), styled like chrome.js's
+// toast. Independent of the panel so it shows in ?nopanel=1 screensaver mode.
+// z-index 5: above the canvas, below the drawer (10) so it tucks away when the
+// drawer is open.
+const CONFIG_LABEL_CSS = `
+  #kn-config { position: fixed; left: 1.1rem; bottom: 1.05rem; z-index: 5;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px; color: #cdd; padding: 0.32rem 0.6rem;
+    background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 3px; pointer-events: none; white-space: nowrap;
+    letter-spacing: 0.02em; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+`;
+let configLabelEl = null;
+function buildConfigLabel() {
+  injectCss(CONFIG_LABEL_CSS);
+  configLabelEl = document.createElement('div');
+  configLabelEl.id = 'kn-config';
+  document.body.appendChild(configLabelEl);
+  updateConfigLabel();
+}
+function updateConfigLabel() {
+  if (configLabelEl) configLabelEl.textContent = `${PIECE_LABEL[piece] || piece} ×${colors}`;
 }
 
 const suppressPanel = new URLSearchParams(location.search).get('nopanel') === '1';
@@ -754,6 +785,7 @@ window.addEventListener('keydown', (e) => {
 // --- init + main loop ---------------------------------------------------
 applyUrlParams();
 buildPanel();
+buildConfigLabel();
 rebuild();
 phase = startPhase;  // honor ?start= (rebuild reset phase to 0)
 syncPresetSelection();
