@@ -15,6 +15,41 @@
 // keep the head in frame. Reveal accelerates from a handful of cells to tens of
 // thousands per second; the per-frame cost is one quad. Modes: spiral (sweep),
 // square (whole rings), all (finished pattern, just zoomed).
+//
+// ── FUTURE IDEAS / TODO ────────────────────────────────────────────────
+// 1. Piece combos (Numberphile2 "Amazing Chessboard Patterns" extras):
+//    - compound leaper = union of several (m,n) offset sets (e.g. knight+camel)
+//    - different piece per color (color 1 knight, color 2 camel, …)
+//    Both are small: a "piece" becomes a LIST of (m,n) pairs / per-color offsets.
+//    Riders (queen/rook/bishop) attack whole lines → denser, different
+//    construction ("queens in exile") and a bigger lift.
+// 2. "How it's determined" visualization — show the per-step decision:
+//    a color's cursor advances the spiral to a candidate; draw the piece's
+//    attack squares; flash any enemy conflict and SKIP (→ the "or none"
+//    empties); on a legal cell, commit the color and light the squares it now
+//    threatens. Needs the placement SEQUENCE + an overlay pass (our current
+//    engine only thresholds finished colors, so this is a new render path).
+//    Two-regime: run it slow while zoomed in, drop the overlay and hand off to
+//    the bulk sweep once cells get too small / placements too fast to read.
+//    Plan: prototype in a knights-lab/ page, then graft the good version into
+//    this sketch as an "opening act."
+// 3. A lab page exploring the CURRENT spiral-coloring viz itself (sandbox for
+//    params/pattern comparison), alongside the "how" lab.
+// 4. 3D extrapolation: generalize the spiral + leaper rule into a 3D shell
+//    spiral with a 3D knight move; swap the quad for instanced voxels/points
+//    + a camera. The raw-WebGL setup keeps this door open. Speculative/big.
+// 5. True construction-order animation (OEIS A395355): instead of the spiral
+//    sweep, replay the actual turn-based placement — K interleaved cursors
+//    jumping around. Jumpier but "how it's really built." Pairs with idea 2.
+// 6. Roster auto-cycle: rotate through pieces/colors/palettes each loop for
+//    long-idle variety (off by default; first entry = 3-color knight).
+// 7. 1-color independent-set variant (OEIS A308885): place a knight only if
+//    the cell isn't attacked by an EXISTING knight (no same-color attacks) —
+//    a different, sparser pattern. Separate small code path.
+// Deferred infra (only if needed): Web Worker for multi-million extents;
+// supersample/mipmapped-color texture to tame zoomed-out moiré (currently we
+// keep the moiré on purpose); letterbox-vs-fill choice at full zoom-out.
+// ───────────────────────────────────────────────────────────────────────
 
 // --- live params (URL-overridable, panel-tunable) -----------------------
 let piece   = 'knight';  // leaper kind (see PIECES)
