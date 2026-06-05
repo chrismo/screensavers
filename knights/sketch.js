@@ -21,7 +21,6 @@ let piece   = 'knight';  // leaper kind (see PIECES)
 let colors  = 3;         // number of knight colors / players (2..4)
 let extent  = 512;       // S: max spiral shell ≈ half the grid side
 let zoomSec = 90;        // seconds for a full zoom-out
-let easeK   = 1.4;       // zoom-phase ease exponent (>1 lingers on the center)
 let paletteIdx = 0;      // index into PALETTES
 let reveal  = 'spiral';  // reveal mode: 'spiral' | 'square' | 'all'
 let startPhase = 0;      // initial zoom phase 0..1 (URL `start`; resume mid-zoom)
@@ -38,7 +37,6 @@ const REVEAL_CODE = { spiral: 1, square: 2, all: 0 }; // matches the shader's uM
 // --- panel adjustment step sizes ----------------------------------------
 const stepExtent = 64;
 const stepZoom   = 10;
-const stepEase   = 0.2;
 
 // --- (m,n) leapers ------------------------------------------------------
 // A leaper reaches the 8 squares (±m,±n) and (±n,±m). Knight = (2,1).
@@ -80,7 +78,6 @@ const helpText = {
   colors: 'How many colors of knights take turns. 2 = the classic Red & Black; 3 is the most interesting.',
   extent: 'How far the spiral is computed (max shell). Bigger reveals more of the large-scale pattern but costs more to simulate.',
   zoom:   'Seconds for one full zoom-out from the center cell to the full extent.',
-  ease:   'Zoom pacing. Higher lingers on the tiny center structure before accelerating outward.',
   reveal: 'How cells appear. spiral = a point sweeps the numbering spiral, laying color with a glowing head. square = whole rings pop in. all = the finished pattern, just zoomed.',
 };
 
@@ -353,14 +350,14 @@ let state = 'zoom';
 let stateT = 0;
 let fade = 1;
 
-// From the eased zoom phase, derive the sweep head (a spiral number), the head
+// From the zoom phase, derive the sweep head (a spiral number), the head
 // ring, and the window half-size that keeps the head just inside the frame.
 function currentReveal() {
   const S = gridS;
   const total = (2 * S + 1) * (2 * S + 1);
-  const easedP = Math.pow(Math.min(Math.max(phase, 0), 1), easeK);
+  const p = Math.min(Math.max(phase, 0), 1);
   // Reveal count grows exponentially (1 → total): accelerating cells/sec.
-  const count = Math.max(1, Math.pow(total, easedP));
+  const count = Math.max(1, Math.pow(total, p));
   const headRing = (Math.sqrt(count) - 1) / 2;       // ring the sweep is on
   const half = Math.min(S, Math.max(H0, headRing * REVEAL_MARGIN + 0.5));
   // Glowing edge ≈ a fraction of the current ring's perimeter, so it reads as a
@@ -501,7 +498,6 @@ const PANEL_HTML = `
       <h2>motion</h2>
       ${paramRow('reveal', 'reveal', 'M')}
       ${paramRow('zoom', 'zoom', '← →')}
-      ${paramRow('ease', 'ease', '↓ ↑')}
       ${paramRow('palette', 'palette', '')}
       <h2>preset</h2>
       <div class="row"><span class="label">preset</span><span id="v-preset" class="val accent" style="color:#9cf"></span></div>
@@ -536,7 +532,6 @@ function buildPanel() {
   dom.extent = document.getElementById('v-extent');
   dom.reveal = document.getElementById('v-reveal');
   dom.zoom = document.getElementById('v-zoom');
-  dom.ease = document.getElementById('v-ease');
   dom.palette = document.getElementById('v-palette');
   dom.preset = document.getElementById('v-preset');
   dom.presetPills = document.getElementById('v-preset-pills');
@@ -609,7 +604,6 @@ function updateDom() {
   dom.extent.textContent = String(extent);
   dom.reveal.textContent = reveal;
   dom.zoom.textContent = `${zoomSec}s`;
-  dom.ease.textContent = easeK.toFixed(1);
   dom.palette.textContent = curPalette().name;
   dom.preset.textContent = presets[presetIdx] ? presets[presetIdx].name : '—';
   for (let i = 0; i < dom.presetPills.children.length; i++) {
@@ -629,7 +623,6 @@ function adjustParam(param, dir) {
   else if (param === 'extent') { extent = Math.max(64, Math.min(MAX_S, extent + dir * stepExtent)); rebuild(); }
   else if (param === 'reveal') { reveal = cycle(REVEAL_MODES, reveal, dir); updateDom(); }
   else if (param === 'zoom') { zoomSec = Math.max(10, zoomSec + dir * stepZoom); updateDom(); }
-  else if (param === 'ease') { easeK = Math.max(1, Math.min(4, +(easeK + dir * stepEase).toFixed(2))); updateDom(); }
   else if (param === 'palette') { paletteIdx = (paletteIdx + dir + PALETTES.length) % PALETTES.length; updateDom(); }
   syncPresetSelection();
 }
@@ -656,7 +649,6 @@ function applyUrlParams() {
   if (q.has('colors')) colors = Math.max(2, Math.min(4, parseInt(q.get('colors'), 10) || colors));
   if (q.has('extent')) extent = Math.max(64, Math.min(MAX_S, parseInt(q.get('extent'), 10) || extent));
   if (q.has('zoom')) zoomSec = Math.max(10, parseInt(q.get('zoom'), 10) || zoomSec);
-  if (q.has('ease')) easeK = Math.max(1, Math.min(4, parseFloat(q.get('ease')) || easeK));
   if (q.has('palette')) paletteIdx = (parseInt(q.get('palette'), 10) || 0) % PALETTES.length;
   if (q.has('reveal') && REVEAL_MODES.includes(q.get('reveal'))) reveal = q.get('reveal');
   if (q.has('start')) startPhase = Math.max(0, Math.min(1, parseFloat(q.get('start')) || 0));
@@ -668,7 +660,6 @@ function copyShareUrl() {
   q.set('colors', String(colors));
   q.set('extent', String(extent));
   q.set('zoom', String(zoomSec));
-  q.set('ease', String(easeK));
   q.set('palette', String(paletteIdx));
   q.set('reveal', reveal);
   q.set('nopanel', '1');
@@ -680,12 +671,10 @@ function copyShareUrl() {
 // --- keyboard -----------------------------------------------------------
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
-  const isAdjust = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '[', ']'].includes(e.key);
+  const isAdjust = ['ArrowLeft', 'ArrowRight', '[', ']'].includes(e.key);
   if (e.repeat && !isAdjust) return;
   if (e.key === 'ArrowLeft') adjustParam('zoom', -1);
   else if (e.key === 'ArrowRight') adjustParam('zoom', 1);
-  else if (e.key === 'ArrowDown') adjustParam('ease', -1);
-  else if (e.key === 'ArrowUp') adjustParam('ease', 1);
   else if (e.key === '[') adjustParam('extent', -1);
   else if (e.key === ']') adjustParam('extent', 1);
   else if (e.key === 'p' || e.key === 'P') adjustParam('piece', 1);
