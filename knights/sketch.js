@@ -8,9 +8,13 @@
 // interesting past ~100k–1M placed cells. See OEIS A392177 / A308885.
 //
 // We simulate the whole pattern once into a typed-array grid, bake it into a
-// single texture, then a raw-WebGL fragment shader samples a centered window
-// that zooms out exponentially — so the reveal rate accelerates from a handful
-// of cells to tens of thousands per second. The per-frame cost is one quad.
+// single texture (RGB = each cell's spiral number, A = its color id), then a
+// raw-WebGL fragment shader samples a centered window. A reveal front gated on
+// the spiral number sweeps outward — a single point tracing the numbering
+// spiral, laying color with a glowing leading edge — while the window zooms to
+// keep the head in frame. Reveal accelerates from a handful of cells to tens of
+// thousands per second; the per-frame cost is one quad. Modes: spiral (sweep),
+// square (whole rings), all (finished pattern, just zoomed).
 
 // --- live params (URL-overridable, panel-tunable) -----------------------
 let piece   = 'knight';  // leaper kind (see PIECES)
@@ -19,13 +23,17 @@ let extent  = 512;       // S: max spiral shell ≈ half the grid side
 let zoomSec = 90;        // seconds for a full zoom-out
 let easeK   = 1.4;       // zoom-phase ease exponent (>1 lingers on the center)
 let paletteIdx = 0;      // index into PALETTES
+let reveal  = 'spiral';  // reveal mode: 'spiral' | 'square' | 'all'
 let startPhase = 0;      // initial zoom phase 0..1 (URL `start`; resume mid-zoom)
 
 // --- internal constants -------------------------------------------------
 const H0 = 0.5;          // starting half-window (cells) — one center cell
 const HOLD_SEC = 5;      // pause at full extent before restarting
 const FADE_SEC = 1.4;    // fade out / in duration
+const REVEAL_MARGIN = 1.14; // keep the sweeping head this far inside the frame edge
 const BG_FALLBACK = [10, 11, 16];
+const REVEAL_MODES = ['spiral', 'square', 'all'];
+const REVEAL_CODE = { spiral: 1, square: 2, all: 0 }; // matches the shader's uMode
 
 // --- panel adjustment step sizes ----------------------------------------
 const stepExtent = 64;
@@ -73,13 +81,15 @@ const helpText = {
   extent: 'How far the spiral is computed (max shell). Bigger reveals more of the large-scale pattern but costs more to simulate.',
   zoom:   'Seconds for one full zoom-out from the center cell to the full extent.',
   ease:   'Zoom pacing. Higher lingers on the tiny center structure before accelerating outward.',
+  reveal: 'How cells appear. spiral = a point sweeps the numbering spiral, laying color with a glowing head. square = whole rings pop in. all = the finished pattern, just zoomed.',
 };
 
 // =======================================================================
 // Simulation — produces `occupant` (Int8) over a (2S+1)² grid.
 //   0 = empty, else colorIndex+1.
 // =======================================================================
-let occupant = null;   // Int8Array
+let occupant = null;   // Int8Array — 0 empty, else color+1
+let spiralIdx = null;  // Int32Array — spiral number (reveal order) per cell
 let gridS = 0;         // the S actually simulated (may be clamped)
 let lastSimMs = 0;
 
@@ -154,6 +164,21 @@ function simulate(S, K, pieceKind) {
   gridS = S;
 }
 
+// Walk the spiral once to label every cell with its spiral number (0,1,2,…).
+// The first (2S+1)² cells of the square spiral exactly fill the [-S,S]² grid,
+// so every cell gets a unique reveal order. Used by the 'spiral' reveal mode.
+function buildSpiralIndex(S) {
+  const W = 2 * S + 1;
+  const out = new Int32Array(W * W);
+  let x = 0, y = 0;
+  for (let i = 0; i < W * W; i++) {
+    out[(y + S) * W + (x + S)] = i;
+    const nxt = spiralStep(x, y);
+    x = nxt[0]; y = nxt[1];
+  }
+  spiralIdx = out;
+}
+
 // =======================================================================
 // WebGL renderer — one textured quad, fragment shader samples a centered
 // window of half-size H cells.
@@ -172,24 +197,62 @@ const VERT = `
   varying vec2 vNdc;
   void main() { vNdc = aPos; gl_Position = vec4(aPos, 0.0, 1.0); }
 `;
+// The texture packs, per cell: RGB = 24-bit spiral number, A = color id (0..K).
+// The fragment shader decides whether a cell has been reached by the reveal
+// front yet, maps the color id through palette uniforms, and adds a glowing
+// leading edge to the most-recently-laid cells in spiral mode.
 const FRAG = `
   precision highp float;
   varying vec2 vNdc;
   uniform sampler2D uTex;
-  uniform float uHalf;     // window half-size in cells
-  uniform float uS;        // grid S
-  uniform float uW;        // 2S+1
+  uniform float uHalf;      // window half-size in cells
+  uniform float uS;         // grid S
+  uniform float uW;         // 2S+1
   uniform float uAspectX;
   uniform float uAspectY;
+  uniform float uFade;      // 1 = visible, 0 = fully faded to bg
+  uniform int   uMode;      // 0 = all, 1 = spiral, 2 = square
+  uniform float uReveal;    // spiral number of the sweep head
+  uniform float uRevealRing;// ring index of the square front
+  uniform float uHead;      // length (in spiral cells) of the glowing leading edge
   uniform vec3  uBg;
-  uniform float uFade;     // 1 = visible, 0 = fully faded to bg
+  uniform vec3  uC1, uC2, uC3, uC4;
   void main() {
     float wx = vNdc.x * uHalf * uAspectX;
     float wy = vNdc.y * uHalf * uAspectY;
     vec2 uv = (vec2(wx, wy) + uS + 0.5) / uW;
-    vec3 col;
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) col = uBg;
-    else col = texture2D(uTex, uv).rgb;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+      gl_FragColor = vec4(uBg, 1.0); return;
+    }
+    vec4 t = texture2D(uTex, uv);
+    float idx = floor(t.r * 255.0 + 0.5)
+              + floor(t.g * 255.0 + 0.5) * 256.0
+              + floor(t.b * 255.0 + 0.5) * 65536.0;
+    int occ = int(floor(t.a * 255.0 + 0.5));
+
+    // Reveal test.
+    bool shown = true;
+    if (uMode == 1) shown = idx <= uReveal;
+    else if (uMode == 2) {
+      float ring = max(abs(floor(wx + 0.5)), abs(floor(wy + 0.5)));
+      shown = ring <= uRevealRing;
+    }
+
+    vec3 col = uBg;
+    if (shown) {
+      if      (occ == 1) col = uC1;
+      else if (occ == 2) col = uC2;
+      else if (occ == 3) col = uC3;
+      else if (occ == 4) col = uC4;
+      // Glowing leading edge: cells laid within the last uHead spiral steps.
+      if (uMode == 1) {
+        float age = uReveal - idx;
+        if (age >= 0.0 && age < uHead) {
+          float g = 1.0 - age / uHead;
+          col = mix(col, vec3(1.0), 0.75 * g * g);
+        }
+      }
+    }
     gl_FragColor = vec4(mix(uBg, col, uFade), 1.0);
   }
 `;
@@ -220,7 +283,8 @@ gl.enableVertexAttribArray(aPos);
 gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
 const U = {};
-for (const name of ['uTex', 'uHalf', 'uS', 'uW', 'uAspectX', 'uAspectY', 'uBg', 'uFade']) {
+for (const name of ['uTex', 'uHalf', 'uS', 'uW', 'uAspectX', 'uAspectY', 'uFade',
+  'uMode', 'uReveal', 'uRevealRing', 'uHead', 'uBg', 'uC1', 'uC2', 'uC3', 'uC4']) {
   U[name] = gl.getUniformLocation(program, name);
 }
 
@@ -234,17 +298,19 @@ gl.uniform1i(U.uTex, 0);
 
 function curPalette() { return PALETTES[paletteIdx % PALETTES.length]; }
 
-// Bake the occupant grid into the bound RGBA texture.
+// Bake spiral number (RGB) + color id (A) per cell. Color is NOT baked — the
+// palette lives in shader uniforms, so changing palette costs nothing here.
 function buildTexture() {
   const S = gridS;
   const W = 2 * S + 1;
-  const pal = curPalette();
-  const lut = [pal.bg, ...pal.colors]; // index 0 = bg, 1.. = colors
   const data = new Uint8Array(W * W * 4);
   for (let i = 0; i < W * W; i++) {
-    const c = lut[occupant[i]] || pal.bg;
+    const n = spiralIdx[i];
     const j = i * 4;
-    data[j] = c[0]; data[j + 1] = c[1]; data[j + 2] = c[2]; data[j + 3] = 255;
+    data[j] = n & 255;
+    data[j + 1] = (n >> 8) & 255;
+    data[j + 2] = (n >> 16) & 255;
+    data[j + 3] = occupant[i]; // 0 empty, else color id
   }
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, W, W, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
@@ -258,6 +324,7 @@ function rebuild(resetAnim = true) {
   const K = Math.max(2, Math.min(colors, 4));
   if (K !== colors) colors = K;
   simulate(S, K, piece);
+  buildSpiralIndex(S);
   buildTexture();
   console.log(`[knights] ${piece} ×${colors}, S=${gridS} (${(2 * gridS + 1) ** 2} cells) simulated in ${lastSimMs.toFixed(1)}ms`);
   if (resetAnim) { phase = 0; state = 'zoom'; stateT = 0; fade = 1; }
@@ -286,10 +353,20 @@ let state = 'zoom';
 let stateT = 0;
 let fade = 1;
 
-function currentHalf() {
+// From the eased zoom phase, derive the sweep head (a spiral number), the head
+// ring, and the window half-size that keeps the head just inside the frame.
+function currentReveal() {
   const S = gridS;
+  const total = (2 * S + 1) * (2 * S + 1);
   const easedP = Math.pow(Math.min(Math.max(phase, 0), 1), easeK);
-  return H0 * Math.pow(S / H0, easedP);
+  // Reveal count grows exponentially (1 → total): accelerating cells/sec.
+  const count = Math.max(1, Math.pow(total, easedP));
+  const headRing = (Math.sqrt(count) - 1) / 2;       // ring the sweep is on
+  const half = Math.min(S, Math.max(H0, headRing * REVEAL_MARGIN + 0.5));
+  // Glowing edge ≈ a fraction of the current ring's perimeter, so it reads as a
+  // visible arc whether we're near the center or zoomed way out.
+  const head = Math.max(10, headRing * 3);
+  return { count, headRing, half, head };
 }
 
 function advance(dt) {
@@ -313,20 +390,31 @@ function advance(dt) {
   }
 }
 
+function rgb3(loc, c) { gl.uniform3f(loc, c[0] / 255, c[1] / 255, c[2] / 255); }
+
 function render() {
   resize();
   const aspect = canvas.width / canvas.height;
   const ax = aspect >= 1 ? aspect : 1;
   const ay = aspect >= 1 ? 1 : 1 / aspect;
   const pal = curPalette();
+  const r = currentReveal();
   gl.useProgram(program);
-  gl.uniform1f(U.uHalf, currentHalf());
+  gl.uniform1f(U.uHalf, r.half);
   gl.uniform1f(U.uS, gridS);
   gl.uniform1f(U.uW, 2 * gridS + 1);
   gl.uniform1f(U.uAspectX, ax);
   gl.uniform1f(U.uAspectY, ay);
-  gl.uniform3f(U.uBg, pal.bg[0] / 255, pal.bg[1] / 255, pal.bg[2] / 255);
   gl.uniform1f(U.uFade, fade);
+  gl.uniform1i(U.uMode, REVEAL_CODE[reveal] ?? 1);
+  gl.uniform1f(U.uReveal, r.count);
+  gl.uniform1f(U.uRevealRing, r.headRing);
+  gl.uniform1f(U.uHead, r.head);
+  rgb3(U.uBg, pal.bg);
+  rgb3(U.uC1, pal.colors[0]);
+  rgb3(U.uC2, pal.colors[1]);
+  rgb3(U.uC3, pal.colors[2] || pal.colors[0]);
+  rgb3(U.uC4, pal.colors[3] || pal.colors[0]);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -411,6 +499,7 @@ const PANEL_HTML = `
       ${paramRow('colors', 'colors', '')}
       ${paramRow('extent', 'extent', '[ ]')}
       <h2>motion</h2>
+      ${paramRow('reveal', 'reveal', 'M')}
       ${paramRow('zoom', 'zoom', '← →')}
       ${paramRow('ease', 'ease', '↓ ↑')}
       ${paramRow('palette', 'palette', '')}
@@ -445,6 +534,7 @@ function buildPanel() {
   dom.piece = document.getElementById('v-piece');
   dom.colors = document.getElementById('v-colors');
   dom.extent = document.getElementById('v-extent');
+  dom.reveal = document.getElementById('v-reveal');
   dom.zoom = document.getElementById('v-zoom');
   dom.ease = document.getElementById('v-ease');
   dom.palette = document.getElementById('v-palette');
@@ -517,6 +607,7 @@ function updateDom() {
   dom.piece.textContent = piece;
   dom.colors.textContent = String(colors);
   dom.extent.textContent = String(extent);
+  dom.reveal.textContent = reveal;
   dom.zoom.textContent = `${zoomSec}s`;
   dom.ease.textContent = easeK.toFixed(1);
   dom.palette.textContent = curPalette().name;
@@ -536,9 +627,10 @@ function adjustParam(param, dir) {
   if (param === 'piece') { piece = cycle(PIECE_NAMES, piece, dir); rebuild(); }
   else if (param === 'colors') { colors = Math.max(2, Math.min(4, colors + dir)); rebuild(); }
   else if (param === 'extent') { extent = Math.max(64, Math.min(MAX_S, extent + dir * stepExtent)); rebuild(); }
+  else if (param === 'reveal') { reveal = cycle(REVEAL_MODES, reveal, dir); updateDom(); }
   else if (param === 'zoom') { zoomSec = Math.max(10, zoomSec + dir * stepZoom); updateDom(); }
   else if (param === 'ease') { easeK = Math.max(1, Math.min(4, +(easeK + dir * stepEase).toFixed(2))); updateDom(); }
-  else if (param === 'palette') { paletteIdx = (paletteIdx + dir + PALETTES.length) % PALETTES.length; buildTexture(); updateDom(); }
+  else if (param === 'palette') { paletteIdx = (paletteIdx + dir + PALETTES.length) % PALETTES.length; updateDom(); }
   syncPresetSelection();
 }
 
@@ -566,6 +658,7 @@ function applyUrlParams() {
   if (q.has('zoom')) zoomSec = Math.max(10, parseInt(q.get('zoom'), 10) || zoomSec);
   if (q.has('ease')) easeK = Math.max(1, Math.min(4, parseFloat(q.get('ease')) || easeK));
   if (q.has('palette')) paletteIdx = (parseInt(q.get('palette'), 10) || 0) % PALETTES.length;
+  if (q.has('reveal') && REVEAL_MODES.includes(q.get('reveal'))) reveal = q.get('reveal');
   if (q.has('start')) startPhase = Math.max(0, Math.min(1, parseFloat(q.get('start')) || 0));
 }
 
@@ -577,6 +670,7 @@ function copyShareUrl() {
   q.set('zoom', String(zoomSec));
   q.set('ease', String(easeK));
   q.set('palette', String(paletteIdx));
+  q.set('reveal', reveal);
   q.set('nopanel', '1');
   const url = `${location.origin}${location.pathname}?${q.toString()}`;
   const done = (msg) => { window.flashToast?.(msg); const d = document.getElementById('copy-desc'); if (d) { const t = d.textContent; d.textContent = msg; setTimeout(() => (d.textContent = t), 1200); } };
@@ -596,6 +690,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === ']') adjustParam('extent', 1);
   else if (e.key === 'p' || e.key === 'P') adjustParam('piece', 1);
   else if (e.key === 'k' || e.key === 'K') adjustParam('palette', 1);
+  else if (e.key === 'm' || e.key === 'M') adjustParam('reveal', 1);
   else if (e.key === 'r' || e.key === 'R') restart();
   else if (e.key === 'c' || e.key === 'C') copyShareUrl();
   else if (e.key === 'h' || e.key === 'H') toggleDrawer();

@@ -13,10 +13,15 @@ with chaotic bands along the axes; the interesting structure only emerges past
 ~100k–1M+ placed cells.
 
 The whole pattern is simulated once into a grid (≈70 ms for the ~1M-cell
-default), baked into a single texture, and a raw-WebGL fragment shader samples a
-centered window that **zooms out exponentially** — so the reveal rate
-accelerates from a handful of cells to tens of thousands per second, starting
-on the single center cell.
+default) and baked into a single texture. A raw-WebGL fragment shader then
+**sweeps a reveal front along the numbering spiral** — a single point laying
+color outward with a glowing leading edge — while a centered window zooms to
+keep the sweeping head in frame. The reveal rate accelerates from a handful of
+cells to tens of thousands per second, starting on the single center cell.
+
+The **reveal** mode switches this between `spiral` (the sweep, default),
+`square` (whole rings pop in at once), and `all` (the finished pattern, just
+zoomed).
 
 Live: https://chrismo.github.io/screensavers/knights/
 
@@ -29,21 +34,23 @@ Open the drawer (the `›` tab on the left edge) to tune:
 | **piece** | Which `(m,n)` leaper the knights are — knight `(2,1)`, camel `(3,1)`, zebra `(3,2)`, antelope `(4,3)`, giraffe `(4,1)`, fers `(1,1)`, vazir `(1,0)`. Each gives a different pattern. |
 | **colors** | Number of knight colors taking turns (2–4). 2 is the classic Red & Black; 3 is the most interesting. |
 | **extent** | How far the spiral is computed (max shell). Bigger reveals more pattern; costs more to simulate. |
+| **reveal** | How cells appear: `spiral` (point sweeps the spiral with a glowing head), `square` (whole rings pop in), `all` (finished pattern, just zoomed). |
 | **zoom** | Seconds for one full zoom-out. |
 | **ease** | Zoom pacing — higher lingers on the tiny center structure before accelerating. |
 | **palette** | Color scheme. |
 
 Keys: `←/→` zoom speed, `↑/↓` ease, `[ ]` extent, `P` cycle piece, `K` cycle
-palette, `1–9` presets, `R` restart zoom, `C` copy screensaver URL, `F`
-fullscreen, `H` hide panel.
+palette, `M` cycle reveal mode, `1–9` presets, `R` restart zoom, `C` copy
+screensaver URL, `F` fullscreen, `H` hide panel.
 
 ## URL params (for autoplay / screensaver use)
 
-`piece`, `colors`, `extent`, `zoom`, `ease`, `palette`, and `nopanel=1`
-(hide the panel). `C` / *copy screensaver URL* builds a URL reproducing the
-current settings, e.g.:
+`piece`, `colors`, `extent`, `zoom`, `ease`, `palette`, `reveal`, `start`
+(initial zoom phase 0–1, to resume mid-sweep), and `nopanel=1` (hide the
+panel). `C` / *copy screensaver URL* builds a URL reproducing the current
+settings, e.g.:
 
-`https://chrismo.github.io/screensavers/knights/?piece=knight&colors=3&extent=512&zoom=90&ease=1.4&palette=0&nopanel=1`
+`https://chrismo.github.io/screensavers/knights/?piece=knight&colors=3&extent=512&zoom=90&ease=1.4&palette=0&reveal=spiral&nopanel=1`
 
 ## References
 
