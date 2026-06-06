@@ -181,14 +181,7 @@ const PANEL_CSS = `
   .kbd-pair .kbd-btn + .kbd-btn { border-left: 1px solid rgba(0, 0, 0, 0.35); }
 `;
 
-function paramRow(label, param, hint) {
-  return `<div class="row"><span class="label">${label}</span>` +
-    `<div class="keys"><span class="kbd-pair">` +
-    `<button class="kbd-btn" data-action="adjust" data-param="${param}" data-dir="-1">−</button>` +
-    `<button class="kbd-btn" data-action="adjust" data-param="${param}" data-dir="1">+</button>` +
-    `</span><span class="key-hint">${hint}</span></div>` +
-    `<span id="v-${param}" class="val"></span></div>`;
-}
+const paramRow = (label, param, hint) => window.SS.paramRow(label, param, hint);
 
 const PANEL_HTML = `
   <div id="drawer">
@@ -225,11 +218,7 @@ const PANEL_HTML = `
   </div>
 `;
 
-function injectCss(css) {
-  const style = document.createElement('style');
-  style.textContent = css;
-  document.head.appendChild(style);
-}
+const injectCss = window.SS.injectCss;
 
 function buildPanel() {
   if (document.getElementById('drawer')) return;
@@ -551,13 +540,7 @@ function setupDom() {
   dom.preset       = document.getElementById('v-preset');
   dom.presetPills  = document.getElementById('v-preset-pills');
 
-  for (let i = 0; i < presets.length; i++) {
-    const pill = document.createElement('button');
-    pill.className = 'pill';
-    pill.textContent = (i + 1) % 10;
-    pill.addEventListener('click', () => { pickPreset(i); pill.blur(); });
-    dom.presetPills.appendChild(pill);
-  }
+  window.SS.presetPills(dom.presetPills, presets.length, pickPreset);
 
   const toggle = document.getElementById('drawer-toggle');
   toggle.addEventListener('click', () => {
@@ -583,31 +566,12 @@ function setupDom() {
     el.blur();
   });
 
-  // Hold an adjust button to auto-repeat — mirrors browser key-repeat on
-  // held arrow/bracket keys. Fires once on pointerdown, then after a 350ms
-  // delay starts ticking every 60ms.
-  let holdDelay, holdInterval;
-  function stopHold() { clearTimeout(holdDelay); clearInterval(holdInterval); }
-  drawerContent.addEventListener('pointerdown', (e) => {
-    const el = e.target.closest('[data-action="adjust"]');
-    if (!el) return;
-    e.preventDefault();
-    const param = el.dataset.param;
-    const dir = Number(el.dataset.dir);
-    adjustParam(param, dir);
-    el.setPointerCapture?.(e.pointerId);
-    holdDelay = setTimeout(() => {
-      holdInterval = setInterval(() => adjustParam(param, dir), 60);
-    }, 350);
-  });
-  drawerContent.addEventListener('pointerup', stopHold);
-  drawerContent.addEventListener('pointercancel', stopHold);
+  // Hold an adjust button to auto-repeat.
+  window.SS.attachHoldRepeat(drawerContent, '[data-action="adjust"]',
+    (el) => adjustParam(el.dataset.param, Number(el.dataset.dir)), { interval: 60 });
 }
 
-function toggleDrawer() {
-  const drawer = document.getElementById('drawer');
-  if (drawer) drawer.classList.toggle('open');
-}
+const toggleDrawer = window.SS.toggleDrawer;
 
 function updateDom() {
   if (!dom.rotAngle) return; // panel was suppressed via ?nopanel=1

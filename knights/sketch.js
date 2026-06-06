@@ -638,15 +638,7 @@ const PANEL_CSS = `
   #kn-tooltip.visible { opacity: 1; transform: translateX(0); }
 `;
 
-function paramRow(label, param, hint) {
-  const help = (helpText[param] || '').replace(/"/g, '&quot;');
-  return `<div class="row" data-help="${help}"><span class="label">${label}</span>` +
-    `<div class="keys"><span class="kbd-pair">` +
-    `<button class="kbd-btn" data-action="adjust" data-param="${param}" data-dir="-1">−</button>` +
-    `<button class="kbd-btn" data-action="adjust" data-param="${param}" data-dir="1">+</button>` +
-    `</span><span class="key-hint">${hint}</span></div>` +
-    `<span id="v-${param}" class="val"></span></div>`;
-}
+const paramRow = (label, param, hint) => window.SS.paramRow(label, param, hint, helpText[param]);
 
 const PANEL_HTML = `
   <div id="drawer">
@@ -677,11 +669,7 @@ const PANEL_HTML = `
   </div>
 `;
 
-function injectCss(css) {
-  const style = document.createElement('style');
-  style.textContent = css;
-  document.head.appendChild(style);
-}
+const injectCss = window.SS.injectCss;
 
 // Persistent config label (the piece groups), styled like chrome.js's toast.
 // Independent of the panel so it shows in ?nopanel=1 screensaver mode.
@@ -818,13 +806,7 @@ function buildPanel() {
   dom.presetPills = document.getElementById('v-preset-pills');
   dom.cycle = document.getElementById('v-cycle');
 
-  for (let i = 0; i < presets.length; i++) {
-    const pill = document.createElement('button');
-    pill.className = 'pill';
-    pill.textContent = (i + 1) % 10;
-    pill.addEventListener('click', () => { pickPreset(i); pill.blur(); });
-    dom.presetPills.appendChild(pill);
-  }
+  window.SS.presetPills(dom.presetPills, presets.length, pickPreset);
 
   const toggle = document.getElementById('drawer-toggle');
   toggle.addEventListener('click', () => { toggleDrawer(); toggle.blur(); });
@@ -850,20 +832,8 @@ function buildPanel() {
 
   // Hold an adjust button to auto-repeat (global params only; group controls
   // re-render their section per tap, so they're single-click).
-  let holdDelay, holdInterval;
-  const stopHold = () => { clearTimeout(holdDelay); clearInterval(holdInterval); };
-  const repeatable = '[data-action="adjust"]';
-  const fire = (el) => adjustParam(el.dataset.param, Number(el.dataset.dir));
-  content.addEventListener('pointerdown', (e) => {
-    const el = e.target.closest(repeatable);
-    if (!el || el.disabled) return;
-    e.preventDefault();
-    fire(el);
-    el.setPointerCapture?.(e.pointerId);
-    holdDelay = setTimeout(() => { holdInterval = setInterval(() => fire(el), 120); }, 350);
-  });
-  content.addEventListener('pointerup', stopHold);
-  content.addEventListener('pointercancel', stopHold);
+  window.SS.attachHoldRepeat(content, '[data-action="adjust"]',
+    (el) => adjustParam(el.dataset.param, Number(el.dataset.dir)), { interval: 120 });
 
   const tooltip = document.createElement('div');
   tooltip.id = 'kn-tooltip';
@@ -885,10 +855,7 @@ function buildPanel() {
   updateDom();
 }
 
-function toggleDrawer() {
-  const d = document.getElementById('drawer');
-  if (d) d.classList.toggle('open');
-}
+const toggleDrawer = window.SS.toggleDrawer;
 
 function updateDom() {
   if (!panelReady) return;
