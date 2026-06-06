@@ -184,7 +184,7 @@ const presets = [
   { name: 'Compound KZ',  groups: [{ pieces: ['knight', 'zebra'], count: 3 }], paletteIdx: 1 },
   { name: 'Wa+Fe+Al',     groups: [{ pieces: ['wazir'], count: 1 }, { pieces: ['ferz'], count: 1 }, { pieces: ['alfil'], count: 1 }], paletteIdx: 1 },
   { name: 'Antelope ×3',  groups: [{ pieces: ['antelope'], count: 3 }], paletteIdx: 1 },
-  { name: 'Dab+Alfil cmp', groups: [{ pieces: ['dabbaba', 'alfil'], count: 2 }], paletteIdx: 0 },
+  { name: 'Ferz+Dab ×6', groups: [{ pieces: ['ferz', 'dabbaba'], count: 6 }], paletteIdx: 0 },
   { name: '5-mix',        groups: [{ pieces: ['knight'], count: 2 }, { pieces: ['wazir'], count: 2 }, { pieces: ['zebra'], count: 1 }], paletteIdx: 1 },
 ];
 let presetIdx = 0;
