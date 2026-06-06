@@ -648,6 +648,7 @@ function updateDom() {
 window.addEventListener('keydown', (e) => {
   // Don't intercept if user is typing in an input (none yet, but defensive).
   if (e.target instanceof HTMLInputElement) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return; // let Cmd+R, Cmd+L, etc. through
   // Browser auto-repeats keydown when held. Allow that for adjust shortcuts
   // (arrows, brackets, , .) but suppress it for toggles, reset, and preset
   // selection — otherwise holding R rapid-fires resetOrbs and holding A

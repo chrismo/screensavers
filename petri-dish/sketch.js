@@ -509,6 +509,7 @@ function copyShareUrl() {
 // reset 30×/sec.
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return; // let Cmd+R, Cmd+L, etc. through
   const isAdjust = (
     e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
     e.key === 'ArrowUp'   || e.key === 'ArrowDown' ||

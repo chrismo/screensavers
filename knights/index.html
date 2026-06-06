@@ -13,20 +13,5 @@
   <canvas id="gl"></canvas>
   <script src="sketch.js"></script>
   <script src="../chrome.js"></script>
-  <script>
-    // Dev-only live reload: on localhost, poll sketch.js's Last-Modified
-    // and refresh the page when it changes. Skipped on GitHub Pages.
-    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-      let last = null;
-      setInterval(async () => {
-        try {
-          const r = await fetch('sketch.js', { method: 'HEAD', cache: 'no-store' });
-          const m = r.headers.get('last-modified');
-          if (last && m && m !== last) location.reload();
-          if (m) last = m;
-        } catch (e) {}
-      }, 800);
-    }
-  </script>
 </body>
 </html>

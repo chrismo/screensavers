@@ -1,5 +1,5 @@
-// Shared sketch chrome: fullscreen toggle (F) + fading hint.
-// Designed to drop into any sketch via <script src="../chrome.js"></script>.
+// Shared sketch chrome: fullscreen toggle (F) + fading hint + toast + dev
+// live-reload. Designed to drop into any sketch via <script src="../chrome.js">.
 (() => {
   const style = document.createElement('style');
   style.textContent = `
@@ -63,9 +63,24 @@
 
   document.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'INPUT') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return; // don't clobber Cmd+F etc.
     if (e.key === 'f' || e.key === 'F') window.toggleFullscreen();
     else if (e.key === '?') flashHint();
   });
+
+  // Dev-only live reload: on localhost, poll the sketch's sketch.js (resolved
+  // relative to the page) and reload when it changes. Skipped on GitHub Pages.
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    let last = null;
+    setInterval(async () => {
+      try {
+        const r = await fetch('sketch.js', { method: 'HEAD', cache: 'no-store' });
+        const m = r.headers.get('last-modified');
+        if (last && m && m !== last) location.reload();
+        if (m) last = m;
+      } catch (e) {}
+    }, 800);
+  }
 
   flashHint();
 })();
