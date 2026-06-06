@@ -38,7 +38,7 @@ Open the drawer (the `›` tab on the left edge) to tune:
 
 | Param | What it does |
 | --- | --- |
-| **pieces** | The PIECE-SET × COUNT groups. In each group, tap leaper chips to include them (their moves union into one compound piece), set how many colors use it (`− +`); `✕` removes the group, *+ add piece* adds one. Roster: knight `(2,1)`, wazir `(1,0)`, ferz `(1,1)`, dabbaba `(2,0)`, alfil `(2,2)`, three-leaper `(3,0)`, zebra `(3,2)`, antelope `(4,3)`. Total colors 2–8. |
+| **pieces** | PIECE-SET × COUNT groups. Each group shows its selected leapers as chips (tap a chip to remove); the `＋` reveals the rest to add (two+ leapers in a group = a compound piece, moves unioned). `− +` sets how many colors use the group; the swatches show those colors; `✕` removes the group; *+ add color group* adds one. Roster: knight `(2,1)`, wazir `(1,0)`, ferz `(1,1)`, dabbaba `(2,0)`, alfil `(2,2)`, three-leaper `(3,0)`, zebra `(3,2)`, antelope `(4,3)`. Total colors 2–8. |
 | **extent** | How far the spiral is computed (max shell). Bigger reveals more pattern; costs more to simulate. |
 | **reveal** | How cells appear: `spiral` (point sweeps the spiral with a glowing head), `square` (whole rings pop in), `all` (finished pattern, just zoomed). |
 | **zoom** | Seconds for one full zoom-out. |
@@ -54,7 +54,8 @@ URL, `F` fullscreen, `H` hide panel. (Piece groups are mouse/touch-only.)
 `groups` (pieces joined by `-`, count after `:`, groups comma-separated — e.g.
 `groups=knight-zebra:2,wazir:1`), `extent`, `zoom`, `palette`, `reveal`,
 `start` (initial zoom phase 0–1, to resume mid-sweep), `cycle=1` (rotate through
-presets), and `nopanel=1` (hide the panel). `C` / *copy screensaver URL* builds
+presets), `nopanel=1` (hide the panel), and `panel=open` (open the drawer on
+load). `C` / *copy screensaver URL* builds
 a URL reproducing the current settings, e.g.:
 
 `https://chrismo.github.io/screensavers/knights/?groups=knight-zebra:2,wazir:1&extent=512&zoom=90&palette=0&reveal=spiral&nopanel=1`

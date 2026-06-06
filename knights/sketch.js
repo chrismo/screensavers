@@ -23,9 +23,10 @@
 //
 // ── FUTURE IDEAS / TODO ────────────────────────────────────────────────
 // 1. [DONE] Per-color pieces AND compound leapers via PIECE-SET × COUNT groups
-//    (each group's colors move as the union of its selected leapers). Still
-//    open: riders (queen/rook/bishop) attack whole lines → denser, different
-//    construction ("queens in exile") and a bigger lift.
+//    (each group's colors move as the union of its selected leapers). Panel UI
+//    reworked to selected-chips + a ＋ that reveals the roster, with per-group
+//    color swatches. Still open: riders (queen/rook/bishop) attack whole lines
+//    → denser, different construction ("queens in exile") and a bigger lift.
 // 2. "How it's determined" visualization — show the per-step decision:
 //    a color's cursor advances the spiral to a candidate; draw the piece's
 //    attack squares; flash any enemy conflict and SKIP (→ the "or none"
@@ -467,6 +468,7 @@ function rebuild(resetAnim = true) {
   if (resetAnim) { phase = 0; state = 'zoom'; stateT = 0; fade = 1; }
   updateDom();
   updateConfigLabel();
+  renderGroups();
 }
 
 // --- canvas sizing ------------------------------------------------------
@@ -585,15 +587,23 @@ const PANEL_CSS = `
   .row .keys { justify-self: start; display: flex; align-items: center; gap: 6px; }
   .row .key-hint { font-size: 10px; color: #5b5b5b; letter-spacing: 0.05em; white-space: nowrap; }
   .grp { border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 0.45rem 0.5rem; margin-bottom: 0.4rem; }
-  .grp-chips { display: flex; flex-wrap: wrap; gap: 0.2rem; }
+  .grp-chips { display: flex; flex-wrap: wrap; gap: 0.2rem; align-items: center; }
   .chip { font-family: inherit; font-size: 11px; padding: 0.2rem 0.4rem; border-radius: 3px; border: none;
-    background: rgba(255,255,255,0.05); color: #6a6a72; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-  .chip:hover { color: #ccc; }
-  .chip.on { background: rgba(156,204,255,0.22); color: #cfe6ff; }
-  .grp-foot { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.45rem; }
-  .grp-foot .grp-count { color: #9cf; font-variant-numeric: tabular-nums; min-width: 1.7rem; }
+    background: rgba(156,204,255,0.20); color: #cfe6ff; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .chip.sel::after { content: ' ×'; color: rgba(255,255,255,0.45); }
+  .chip.sel:hover { background: rgba(230,110,110,0.30); color: #fff; }
+  .chip.add { background: rgba(255,255,255,0.05); color: #9cf; font-weight: 600; padding: 0.2rem 0.45rem; }
+  .chip.add:hover { background: rgba(255,255,255,0.12); color: #fff; }
+  .grp-roster { display: flex; flex-wrap: wrap; gap: 0.2rem; margin-top: 0.35rem; padding-top: 0.35rem;
+    border-top: 1px dashed rgba(255,255,255,0.1); }
+  .grp-roster .chip { background: rgba(255,255,255,0.05); color: #8a8a92; }
+  .grp-roster .chip:hover { background: rgba(255,255,255,0.12); color: #ddd; }
+  .grp-foot { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.5rem; }
+  .grp-sw { display: flex; gap: 2px; margin-right: auto; }
+  .grp-sw .sw { width: 11px; height: 11px; border-radius: 2px; }
+  .grp-foot .grp-count { color: #9cf; font-variant-numeric: tabular-nums; min-width: 1.6rem; text-align: center; }
   .grp-del { background: none; border: none; color: #666; cursor: pointer; font-family: inherit;
-    font-size: 13px; padding: 0 0.15rem; margin-left: auto; }
+    font-size: 13px; padding: 0 0.15rem; }
   .grp-del:hover:not([disabled]) { color: #e66; }
   .grp-del[disabled], .kbd-btn[disabled] { opacity: 0.3; cursor: default; }
   .addgrp { display: block; width: 100%; margin: 0.5rem 0 0.2rem; padding: 0.35rem; border-radius: 3px;
@@ -641,7 +651,7 @@ const PANEL_HTML = `
       <h1>Knights <small>spiral</small></h1>
       <h2>pieces <span id="v-total" class="h2-aside"></span></h2>
       <div id="groups"></div>
-      <button class="addgrp" data-action="grp-add">+ add piece</button>
+      <button class="addgrp" data-action="grp-add">+ add color group</button>
       <h2>field</h2>
       ${paramRow('extent', 'extent', '[ ]')}
       <h2>motion</h2>
@@ -693,57 +703,56 @@ function updateConfigLabel() {
 
 const suppressPanel = new URLSearchParams(location.search).get('nopanel') === '1';
 
-// --- group rows ---------------------------------------------------------
-function groupRowHtml(g, i, total) {
-  const incDis = total >= MAX_COLORS ? ' disabled' : '';
+// --- group rows (selected chips + a ＋ that reveals the rest) ------------
+let addingGroup = -1;   // index of the group whose roster is expanded, or -1
+
+function swatchStrip(startColor, count, palCols) {
+  let s = '';
+  for (let k = 0; k < count; k++) {
+    const c = palCols[startColor + k] || [80, 80, 80];
+    s += `<span class="sw" style="background:rgb(${c[0]},${c[1]},${c[2]})"></span>`;
+  }
+  return s;
+}
+
+function groupRowHtml(g, i, total, startColor, palCols) {
   const decDis = g.count <= 1 ? ' disabled' : '';
+  const incDis = total >= MAX_COLORS ? ' disabled' : '';
   const delDis = groups.length <= 1 ? ' disabled' : '';
-  const chips = PIECE_NAMES.map((p) =>
-    `<button class="chip${g.pieces.includes(p) ? ' on' : ''}" data-action="grp-chip" data-i="${i}" data-piece="${p}">${PIECE_LABEL[p] || p}</button>`).join('');
+  const canAdd = g.pieces.length < PIECE_NAMES.length;
+  const sel = g.pieces.map((p) =>
+    `<button class="chip sel" data-action="grp-chip" data-i="${i}" data-piece="${p}" title="remove">${PIECE_LABEL[p] || p}</button>`).join('');
+  const plus = canAdd ? `<button class="chip add" data-action="grp-addpiece" data-i="${i}" title="add a leaper">＋</button>` : '';
+  let roster = '';
+  if (addingGroup === i && canAdd) {
+    roster = '<div class="grp-roster">' + PIECE_NAMES.filter((p) => !g.pieces.includes(p)).map((p) =>
+      `<button class="chip" data-action="grp-chip" data-i="${i}" data-piece="${p}">${PIECE_LABEL[p] || p}</button>`).join('') + '</div>';
+  }
   return `<div class="grp" data-i="${i}">` +
-    `<div class="grp-chips">${chips}</div>` +
-    `<div class="grp-foot"><span class="kbd-pair">` +
+    `<div class="grp-chips">${sel}${plus}</div>${roster}` +
+    `<div class="grp-foot"><span class="grp-sw">${swatchStrip(startColor, g.count, palCols)}</span>` +
+    `<span class="kbd-pair">` +
     `<button class="kbd-btn" data-action="grp-count" data-i="${i}" data-dir="-1"${decDis}>−</button>` +
     `<button class="kbd-btn" data-action="grp-count" data-i="${i}" data-dir="1"${incDis}>+</button></span>` +
     `<span class="grp-count">×${g.count}</span>` +
     `<button class="grp-del" data-action="grp-del" data-i="${i}"${delDis}>✕</button></div></div>`;
 }
 
-// Full re-render (structure changed: add/remove group, or preset applied).
+// Rebuild the groups section (single source of truth). Swatches show each
+// group's actual rendered colors, so the panel maps colors → groups.
 function renderGroups() {
   const c = document.getElementById('groups');
   if (!c) return;
   const total = totalColors();
-  c.innerHTML = groups.map((g, i) => groupRowHtml(g, i, total)).join('');
-  const t = document.getElementById('v-total');
-  if (t) t.textContent = `${total} colors`;
-  const add = document.querySelector('.addgrp');
-  if (add) add.disabled = total >= MAX_COLORS;
-}
-
-// Lightweight in-place update (a piece/count changed; structure unchanged) so
-// held buttons aren't yanked out of the DOM mid-repeat.
-function refreshGroupStates() {
-  const cont = document.getElementById('groups');
-  if (!cont) return;
-  const total = totalColors();
-  const t = document.getElementById('v-total');
-  if (t) t.textContent = `${total} colors`;
-  for (const row of cont.querySelectorAll('.grp')) {
-    const i = Number(row.dataset.i);
-    const g = groups[i];
-    if (!g) continue;
-    for (const chip of row.querySelectorAll('.chip')) {
-      chip.classList.toggle('on', g.pieces.includes(chip.dataset.piece));
-    }
-    row.querySelector('.grp-count').textContent = `×${g.count}`;
-    const inc = row.querySelector('[data-action="grp-count"][data-dir="1"]');
-    const dec = row.querySelector('[data-action="grp-count"][data-dir="-1"]');
-    const del = row.querySelector('.grp-del');
-    if (inc) inc.disabled = total >= MAX_COLORS;
-    if (dec) dec.disabled = g.count <= 1;
-    if (del) del.disabled = groups.length <= 1;
+  const palCols = genColors(curPalette(), Math.max(1, total));
+  let html = '', startColor = 0;
+  for (let i = 0; i < groups.length; i++) {
+    html += groupRowHtml(groups[i], i, total, startColor, palCols);
+    startColor += groups[i].count;
   }
+  c.innerHTML = html;
+  const t = document.getElementById('v-total');
+  if (t) t.textContent = `${total} colors`;
   const add = document.querySelector('.addgrp');
   if (add) add.disabled = total >= MAX_COLORS;
 }
@@ -757,9 +766,12 @@ function grpChip(i, piece) {
   } else {
     g.pieces = sortPieces([...g.pieces, piece]);
   }
-  refreshGroupStates();
-  rebuild();
+  rebuild();           // re-sims, then renderGroups()
   syncPresetSelection();
+}
+function grpToggleAdd(i) {
+  addingGroup = addingGroup === i ? -1 : i;
+  renderGroups();
 }
 function grpCount(i, dir) {
   const g = groups[i];
@@ -767,21 +779,20 @@ function grpCount(i, dir) {
   if (dir > 0 && totalColors() >= MAX_COLORS) return;
   if (dir < 0 && g.count <= 1) return;
   g.count += dir;
-  refreshGroupStates();
   rebuild();
   syncPresetSelection();
 }
 function grpDel(i) {
   if (groups.length <= 1) return;
   groups.splice(i, 1);
-  renderGroups();
+  addingGroup = -1;
   rebuild();
   syncPresetSelection();
 }
 function grpAdd() {
   if (totalColors() >= MAX_COLORS) return;
   groups.push({ pieces: ['knight'], count: 1 });
-  renderGroups();
+  addingGroup = groups.length - 1; // open the new group's roster to pick pieces
   rebuild();
   syncPresetSelection();
 }
@@ -791,6 +802,9 @@ function buildPanel() {
   injectCss(PANEL_CSS);
   const parsed = new DOMParser().parseFromString(PANEL_HTML, 'text/html');
   document.body.appendChild(parsed.body.firstElementChild);
+  if (new URLSearchParams(location.search).get('panel') === 'open') {
+    document.getElementById('drawer').classList.add('open');
+  }
 
   dom.extent = document.getElementById('v-extent');
   dom.reveal = document.getElementById('v-reveal');
@@ -822,22 +836,20 @@ function buildPanel() {
     else if (a === 'fullscreen') window.toggleFullscreen?.();
     else if (a === 'hide') toggleDrawer();
     else if (a === 'grp-chip') grpChip(Number(el.dataset.i), el.dataset.piece);
+    else if (a === 'grp-addpiece') grpToggleAdd(Number(el.dataset.i));
+    else if (a === 'grp-count') grpCount(Number(el.dataset.i), Number(el.dataset.dir));
     else if (a === 'grp-del') grpDel(Number(el.dataset.i));
     else if (a === 'grp-add') grpAdd();
     else return;
     el.blur();
   });
 
-  // Hold an adjust / group cycler to auto-repeat. These update in place
-  // (no structural DOM swap) so the captured button survives the repeat.
+  // Hold an adjust button to auto-repeat (global params only; group controls
+  // re-render their section per tap, so they're single-click).
   let holdDelay, holdInterval;
   const stopHold = () => { clearTimeout(holdDelay); clearInterval(holdInterval); };
-  const repeatable = '[data-action="adjust"],[data-action="grp-count"]';
-  const fire = (el) => {
-    const a = el.dataset.action, dir = Number(el.dataset.dir);
-    if (a === 'adjust') adjustParam(el.dataset.param, dir);
-    else if (a === 'grp-count') grpCount(Number(el.dataset.i), dir);
-  };
+  const repeatable = '[data-action="adjust"]';
+  const fire = (el) => adjustParam(el.dataset.param, Number(el.dataset.dir));
   content.addEventListener('pointerdown', (e) => {
     const el = e.target.closest(repeatable);
     if (!el || el.disabled) return;
@@ -882,7 +894,6 @@ function updateDom() {
   dom.palette.textContent = curPalette().name;
   dom.preset.textContent = presets[presetIdx] ? presets[presetIdx].name : '—';
   if (dom.cycle) dom.cycle.textContent = cyclePresets ? 'on' : 'off';
-  refreshGroupStates();
   for (let i = 0; i < dom.presetPills.children.length; i++) {
     dom.presetPills.children[i].classList.toggle('active', i === presetIdx);
   }
@@ -898,7 +909,7 @@ function adjustParam(param, dir) {
   if (param === 'extent') { extent = Math.max(64, Math.min(MAX_S, extent + dir * stepExtent)); rebuild(); }
   else if (param === 'reveal') { reveal = cycle(REVEAL_MODES, reveal, dir); updateDom(); }
   else if (param === 'zoom') { zoomSec = Math.max(10, zoomSec + dir * stepZoom); updateDom(); }
-  else if (param === 'palette') { paletteIdx = (paletteIdx + dir + PALETTES.length) % PALETTES.length; buildPaletteTexture(); updateDom(); }
+  else if (param === 'palette') { paletteIdx = (paletteIdx + dir + PALETTES.length) % PALETTES.length; buildPaletteTexture(); renderGroups(); updateDom(); }
   syncPresetSelection();
 }
 
@@ -908,7 +919,7 @@ function pickPreset(i) {
   presetIdx = i;
   groups = cloneGroups(p.groups);
   paletteIdx = p.paletteIdx;
-  renderGroups();
+  addingGroup = -1;
   rebuild();
 }
 
@@ -925,7 +936,7 @@ function gotoNextPreset() {
   presetIdx = i;
   groups = cloneGroups(p.groups);
   paletteIdx = p.paletteIdx;
-  renderGroups();
+  addingGroup = -1;
   rebuild(false);
 }
 
