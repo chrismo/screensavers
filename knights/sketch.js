@@ -1,11 +1,16 @@
 // Knights spiral coloring — a screensaver from Numberphile's "Red & Black
 // Knights" (Neil Sloane / Jonas Karlsson). Cells of an infinite square spiral
-// are claimed by K colors of knights taking turns: on a color's turn it grabs
+// are claimed by K colors of pieces taking turns: on a color's turn it grabs
 // the lowest-numbered cell not occupied and not attacked by ANY OTHER color
-// (same-color knights may attack each other — that asymmetry is what breeds the
-// large-scale patterns). With knights and 2+ colors the plane splits into
-// colored regions with chaotic bands along the axes; the structure only gets
-// interesting past ~100k–1M placed cells. See OEIS A392177 / A308885.
+// (same-color pieces may attack each other — that asymmetry is what breeds the
+// large-scale patterns). With 2+ colors the plane splits into colored regions
+// with chaotic bands along the axes; the structure only gets interesting past
+// ~100k–1M placed cells. See OEIS A392177 / A308885.
+//
+// Colors are specified as PIECE × COUNT groups: each group is a leaper and how
+// many color-slots use it (total colors = the sum). One group {knight,3} is the
+// classic 3-color knight; several groups give the Numberphile2 "Amazing
+// Chessboard Patterns" per-piece combos.
 //
 // We simulate the whole pattern once into a typed-array grid, bake it into a
 // single texture (RGB = each cell's spiral number, A = its color id), then a
@@ -17,11 +22,9 @@
 // square (whole rings), all (finished pattern, just zoomed).
 //
 // ── FUTURE IDEAS / TODO ────────────────────────────────────────────────
-// 1. Piece combos (Numberphile2 "Amazing Chessboard Patterns" extras):
-//    - compound leaper = union of several (m,n) offset sets (e.g. knight+camel)
-//    - different piece per color (color 1 knight, color 2 camel, …)
-//    Both are small: a "piece" becomes a LIST of (m,n) pairs / per-color offsets.
-//    Riders (queen/rook/bishop) attack whole lines → denser, different
+// 1. [DONE] Per-color pieces AND compound leapers via PIECE-SET × COUNT groups
+//    (each group's colors move as the union of its selected leapers). Still
+//    open: riders (queen/rook/bishop) attack whole lines → denser, different
 //    construction ("queens in exile") and a bigger lift.
 // 2. "How it's determined" visualization — show the per-step decision:
 //    a color's cursor advances the spiral to a candidate; draw the piece's
@@ -41,19 +44,16 @@
 // 5. True construction-order animation (OEIS A395355): instead of the spiral
 //    sweep, replay the actual turn-based placement — K interleaved cursors
 //    jumping around. Jumpier but "how it's really built." Pairs with idea 2.
-// 6. [DONE] Preset cycling: rotate to the next preset when each run finishes
-//    (the `cycle` toggle / `L` key / ?cycle=1). Off by default.
-// 7. 1-color independent-set variant (OEIS A308885): place a knight only if
-//    the cell isn't attacked by an EXISTING knight (no same-color attacks) —
-//    a different, sparser pattern. Separate small code path.
+// 6. [DONE] Preset cycling: rotate to the next preset when each run finishes.
+// 7. 1-color independent-set variant (OEIS A308885): place a piece only if the
+//    cell isn't attacked by an EXISTING piece (no same-color attacks).
+// 8. Up to 16 colors (widen the Uint8 threat mask to Uint16) if 8 proves few.
 // Deferred infra (only if needed): Web Worker for multi-million extents;
-// supersample/mipmapped-color texture to tame zoomed-out moiré (currently we
-// keep the moiré on purpose); letterbox-vs-fill choice at full zoom-out.
+// supersample to tame zoomed-out moiré (currently kept on purpose).
 // ───────────────────────────────────────────────────────────────────────
 
 // --- live params (URL-overridable, panel-tunable) -----------------------
-let piece   = 'knight';  // leaper kind (see PIECES)
-let colors  = 3;         // number of knight colors / players (2..4)
+let groups = [{ pieces: ['knight'], count: 3 }]; // each group: a leaper SET × COUNT
 let extent  = 512;       // S: max spiral shell ≈ half the grid side
 let zoomSec = 90;        // seconds for a full zoom-out
 let paletteIdx = 0;      // index into PALETTES
@@ -66,74 +66,146 @@ const H0 = 0.5;          // starting half-window (cells) — one center cell
 const HOLD_SEC = 5;      // pause at full extent before restarting
 const FADE_SEC = 1.4;    // fade out / in duration
 const REVEAL_MARGIN = 1.14; // keep the sweeping head this far inside the frame edge
-const BG_FALLBACK = [10, 11, 16];
 const REVEAL_MODES = ['spiral', 'square', 'all'];
 const REVEAL_CODE = { spiral: 1, square: 2, all: 0 }; // matches the shader's uMode
+const MIN_COLORS = 2;
+const MAX_COLORS = 8;    // total colors; bounded by the 8-bit threat mask
 
 // --- panel adjustment step sizes ----------------------------------------
 const stepExtent = 64;
 const stepZoom   = 10;
 
-// --- (m,n) leapers ------------------------------------------------------
-// A leaper reaches the 8 squares (±m,±n) and (±n,±m). Knight = (2,1).
+// --- (m,n) leapers (the Numberphile2 roster) ----------------------------
+// A leaper reaches the 8 squares (±m,±n) and (±n,±m); symmetric leapers just
+// produce duplicate offsets, which are harmless.
 const PIECES = {
-  knight:   [2, 1],
-  camel:    [3, 1],
-  zebra:    [3, 2],
-  antelope: [4, 3],
-  giraffe:  [4, 1],
-  fers:     [1, 1],
-  vazir:    [1, 0],
+  knight:      [2, 1],
+  wazir:       [1, 0],
+  ferz:        [1, 1],
+  dabbaba:     [2, 0],
+  alfil:       [2, 2],
+  threeleaper: [3, 0],
+  zebra:       [3, 2],
+  antelope:    [4, 3],
 };
 const PIECE_NAMES = Object.keys(PIECES);
 
-// Display names for the persistent config label (e.g. "Knights ×2").
+// Display names for the panel + config label.
 const PIECE_LABEL = {
-  knight: 'Knights', camel: 'Camels', zebra: 'Zebras', antelope: 'Antelopes',
-  giraffe: 'Giraffes', fers: 'Fers', vazir: 'Vazirs',
+  knight: 'Knight', wazir: 'Wazir', ferz: 'Ferz', dabbaba: 'Dabbaba',
+  alfil: 'Alfil', threeleaper: 'Three-leaper', zebra: 'Zebra', antelope: 'Antelope',
 };
 
-// --- palettes (bg + up to 4 knight colors) ------------------------------
+// --- palettes (procedural; up to MAX_COLORS evenly-spaced hues) ----------
 const PALETTES = [
-  { name: 'Ember', bg: [10, 11, 16], colors: [[232, 93, 63], [74, 163, 223], [150, 210, 90], [232, 193, 90]] },
-  { name: 'Neon',  bg: [8, 8, 12],   colors: [[255, 86, 120], [60, 200, 255], [180, 255, 90], [255, 210, 70]] },
-  { name: 'Mono',  bg: [13, 13, 15], colors: [[236, 236, 240], [150, 150, 158], [96, 96, 104], [60, 60, 66]] },
-  { name: 'Reef',  bg: [6, 14, 18],  colors: [[255, 122, 80], [34, 200, 180], [120, 150, 255], [240, 220, 110]] },
+  { name: 'Vivid',  bg: [10, 11, 16], hue0: 8,   sat: 0.70, light: 0.58 },
+  { name: 'Neon',   bg: [8, 8, 12],   hue0: 330, sat: 0.95, light: 0.62 },
+  { name: 'Pastel', bg: [16, 16, 22], hue0: 20,  sat: 0.45, light: 0.70 },
+  { name: 'Mono',   bg: [13, 13, 15], mono: true },
 ];
+function curPalette() { return PALETTES[paletteIdx % PALETTES.length]; }
+
+function hsl2rgb(h, s, l) {
+  if (s === 0) { const c = Math.round(l * 255); return [c, c, c]; }
+  const hue2 = (p, q, t) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [hue2(p, q, h + 1 / 3), hue2(p, q, h), hue2(p, q, h - 1 / 3)]
+    .map((v) => Math.round(v * 255));
+}
+
+// N distinct colors for the current scheme.
+function genColors(scheme, N) {
+  const out = [];
+  for (let i = 0; i < N; i++) {
+    if (scheme.mono) {
+      const t = N <= 1 ? 0 : i / (N - 1);
+      const c = Math.round((0.92 - 0.62 * t) * 255);
+      out.push([c, c, Math.min(255, Math.round(c * 1.03))]); // faint cool tint
+    } else {
+      const h = (((scheme.hue0 || 0) + i * 360 / N) % 360) / 360;
+      out.push(hsl2rgb(h, scheme.sat, scheme.light));
+    }
+  }
+  return out;
+}
+
+// --- group helpers ------------------------------------------------------
+// A group is { pieces: [leaper, …], count }. Its colors all move as the UNION
+// of the listed leapers (a compound piece).
+function totalColors() { let s = 0; for (const g of groups) s += g.count; return s; }
+function sortPieces(ps) {
+  const uniq = [...new Set(ps)].filter((p) => PIECES[p]);
+  uniq.sort((a, b) => PIECE_NAMES.indexOf(a) - PIECE_NAMES.indexOf(b));
+  return uniq;
+}
+function pieceSetLabel(ps) { return ps.map((p) => PIECE_LABEL[p] || p).join('+'); }
+function labelText() {
+  return groups.map((g) => `${pieceSetLabel(g.pieces)}×${g.count}`).join(' · ');
+}
+function groupsEqual(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].count !== b[i].count || a[i].pieces.length !== b[i].pieces.length) return false;
+    for (let j = 0; j < a[i].pieces.length; j++) if (a[i].pieces[j] !== b[i].pieces[j]) return false;
+  }
+  return true;
+}
+function cloneGroups(gs) { return gs.map((g) => ({ pieces: g.pieces.slice(), count: g.count })); }
+
+// Keep groups valid: each pieces set non-empty & known, count ≥ 1, total in
+// [MIN_COLORS, MAX_COLORS].
+function normalizeGroups() {
+  groups = groups.map((g) => ({ pieces: sortPieces(g.pieces || []), count: g.count | 0 }))
+    .filter((g) => g.pieces.length && g.count > 0);
+  if (!groups.length) groups = [{ pieces: ['knight'], count: 3 }];
+  let t = totalColors();
+  for (let i = groups.length - 1; i >= 0 && t > MAX_COLORS; i--) {
+    const cut = Math.min(groups[i].count, t - MAX_COLORS);
+    groups[i].count -= cut; t -= cut;
+    if (groups[i].count === 0) groups.splice(i, 1);
+  }
+  if (!groups.length) groups = [{ pieces: ['knight'], count: MAX_COLORS }];
+  while (totalColors() < MIN_COLORS) groups[groups.length - 1].count++;
+}
 
 // --- presets ------------------------------------------------------------
-// Each snapshots a piece + color count + palette; preset 0 is the 3-color
-// knight the build leads with. Others span the fairy pieces / Red & Black.
 const presets = [
-  { name: 'Knights ×3', piece: 'knight',   colors: 3, paletteIdx: 0 },
-  { name: 'Red&Black',  piece: 'knight',   colors: 2, paletteIdx: 2 },
-  { name: 'Knights ×4', piece: 'knight',   colors: 4, paletteIdx: 1 },
-  { name: 'Camel ×3',   piece: 'camel',    colors: 3, paletteIdx: 3 },
-  { name: 'Zebra ×3',   piece: 'zebra',    colors: 3, paletteIdx: 0 },
-  { name: 'Antelope ×3', piece: 'antelope', colors: 3, paletteIdx: 1 },
-  { name: 'Fers ×3',    piece: 'fers',     colors: 3, paletteIdx: 3 },
+  { name: 'Knights ×3',   groups: [{ pieces: ['knight'], count: 3 }], paletteIdx: 0 },
+  { name: 'Red & Black',  groups: [{ pieces: ['knight'], count: 2 }], paletteIdx: 3 },
+  { name: 'Knight+Zebra', groups: [{ pieces: ['knight'], count: 2 }, { pieces: ['zebra'], count: 1 }], paletteIdx: 0 },
+  { name: 'Compound KZ',  groups: [{ pieces: ['knight', 'zebra'], count: 3 }], paletteIdx: 1 },
+  { name: 'Wa+Fe+Al',     groups: [{ pieces: ['wazir'], count: 1 }, { pieces: ['ferz'], count: 1 }, { pieces: ['alfil'], count: 1 }], paletteIdx: 1 },
+  { name: 'Antelope ×3',  groups: [{ pieces: ['antelope'], count: 3 }], paletteIdx: 1 },
+  { name: 'Dab+Alfil cmp', groups: [{ pieces: ['dabbaba', 'alfil'], count: 2 }], paletteIdx: 0 },
+  { name: '5-mix',        groups: [{ pieces: ['knight'], count: 2 }, { pieces: ['wazir'], count: 2 }, { pieces: ['zebra'], count: 1 }], paletteIdx: 1 },
 ];
 let presetIdx = 0;
 
 const helpText = {
-  piece:  'Which fairy "leaper" the knights are. Knight = (2,1); camel = (3,1); zebra = (3,2); etc. Changes the whole pattern.',
-  colors: 'How many colors of knights take turns. 2 = the classic Red & Black; 3 is the most interesting.',
   extent: 'How far the spiral is computed (max shell). Bigger reveals more of the large-scale pattern but costs more to simulate.',
   zoom:   'Seconds for one full zoom-out from the center cell to the full extent.',
   reveal: 'How cells appear. spiral = a point sweeps the numbering spiral, laying color with a glowing head. square = whole rings pop in. all = the finished pattern, just zoomed.',
+  palette: 'Color scheme. Colors are generated to evenly span the hue wheel for however many colors the groups add up to.',
 };
 
 // =======================================================================
 // Simulation — produces `occupant` (Int8) over a (2S+1)² grid.
-//   0 = empty, else colorIndex+1.
+//   0 = empty, else colorIndex+1. Each color uses its group's piece.
 // =======================================================================
 let occupant = null;   // Int8Array — 0 empty, else color+1
 let spiralIdx = null;  // Int32Array — spiral number (reveal order) per cell
 let gridS = 0;         // the S actually simulated (may be clamped)
+let gridK = 0;         // number of colors actually simulated
 let lastSimMs = 0;
 
 // Square spiral: counterclockwise, starts at origin, first step east.
-// (Verbatim from the OEIS A392177 reference program.)
 function spiralStep(a, b) {
   if (a === 0 && b === 0) return [1, 0];
   if (a > Math.abs(b)) return [a, b + 1];
@@ -146,66 +218,72 @@ function spiralStep(a, b) {
   return [a, b - 1]; // a === -b && a < 0
 }
 
-function simulate(S, K, pieceKind) {
+function leaperOffsets(piece) {
+  const [m, n] = PIECES[piece] || PIECES.knight;
+  return [
+    [m, n], [m, -n], [-m, n], [-m, -n],
+    [n, m], [-n, m], [n, -m], [-n, -m],
+  ];
+}
+
+function simulate(S) {
   const W = 2 * S + 1;
   const occ = new Int8Array(W * W);       // 0 empty, else color+1
   const threat = new Uint8Array(W * W);   // bit p set if threatened by color p
   const idx = (x, y) => (y + S) * W + (x + S);
   const inGrid = (x, y) => x >= -S && x <= S && y >= -S && y <= S;
 
-  const [m, n] = PIECES[pieceKind] || PIECES.knight;
-  // 8 leaper offsets (duplicates for symmetric leapers are harmless).
-  const offs = [
-    [m, n], [m, -n], [-m, n], [-m, -n],
-    [n, m], [-n, m], [n, -m], [-n, -m],
-  ];
+  // Per-color offset set: each group's colors move as the UNION of its leapers.
+  const colorOffs = [];
+  for (const g of groups) {
+    const offs = g.pieces.flatMap(leaperOffsets); // duplicate offsets are harmless
+    for (let i = 0; i < g.count; i++) colorOffs.push(offs);
+  }
+  const K = colorOffs.length;
 
-  // Per-color candidate pointer (a spiral position) + done flag.
   const cx = new Int32Array(K);
   const cy = new Int32Array(K);
   const done = new Array(K).fill(false);
   let remaining = K;
 
-  const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const t0 = performance.now();
 
   while (remaining > 0) {
     for (let k = 0; k < K; k++) {
       if (done[k]) continue;
       let x = cx[k], y = cy[k];
-      // Advance along the spiral to the smallest cell that's legal for color k:
-      // not occupied and not threatened by any OTHER color.
+      // Advance to the smallest cell legal for color k: not occupied and not
+      // threatened by any OTHER color.
       const notK = (~(1 << k)) & 0xff;
       while (true) {
-        if (x > S || x < -S || y > S || y < -S) { // left the simulated region
-          done[k] = true; remaining--; break;
-        }
+        if (x > S || x < -S || y > S || y < -S) { done[k] = true; remaining--; break; }
         const id = idx(x, y);
-        if (occ[id] === 0 && (threat[id] & notK) === 0) break; // legal — place here
+        if (occ[id] === 0 && (threat[id] & notK) === 0) break;
         const nxt = spiralStep(x, y);
         x = nxt[0]; y = nxt[1];
       }
       cx[k] = x; cy[k] = y;
       if (done[k]) continue;
 
-      // Place a color-k knight and mark its threats.
       const id = idx(x, y);
       occ[id] = k + 1;
       const bit = 1 << k;
-      for (let o = 0; o < 8; o++) {
+      const offs = colorOffs[k];
+      for (let o = 0; o < offs.length; o++) {
         const tx = x + offs[o][0], ty = y + offs[o][1];
         if (inGrid(tx, ty)) threat[idx(tx, ty)] |= bit;
       }
     }
   }
 
-  lastSimMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
+  lastSimMs = performance.now() - t0;
   occupant = occ;
   gridS = S;
+  gridK = K;
 }
 
-// Walk the spiral once to label every cell with its spiral number (0,1,2,…).
-// The first (2S+1)² cells of the square spiral exactly fill the [-S,S]² grid,
-// so every cell gets a unique reveal order. Used by the 'spiral' reveal mode.
+// Label every cell with its spiral number (reveal order). The first (2S+1)²
+// spiral cells exactly fill the [-S,S]² grid.
 function buildSpiralIndex(S) {
   const W = 2 * S + 1;
   const out = new Int32Array(W * W);
@@ -219,8 +297,8 @@ function buildSpiralIndex(S) {
 }
 
 // =======================================================================
-// WebGL renderer — one textured quad, fragment shader samples a centered
-// window of half-size H cells.
+// WebGL renderer — one textured quad; the fragment shader samples a centered
+// window and maps each cell's color id through a small palette texture.
 // =======================================================================
 const canvas = document.getElementById('gl');
 const gl = canvas.getContext('webgl', { antialias: false, alpha: false });
@@ -236,14 +314,13 @@ const VERT = `
   varying vec2 vNdc;
   void main() { vNdc = aPos; gl_Position = vec4(aPos, 0.0, 1.0); }
 `;
-// The texture packs, per cell: RGB = 24-bit spiral number, A = color id (0..K).
-// The fragment shader decides whether a cell has been reached by the reveal
-// front yet, maps the color id through palette uniforms, and adds a glowing
-// leading edge to the most-recently-laid cells in spiral mode.
+// Data texture packs per cell: RGB = 24-bit spiral number, A = color id (0..K).
+// Color id indexes a 16-wide palette texture (texel 0 = background).
 const FRAG = `
   precision highp float;
   varying vec2 vNdc;
   uniform sampler2D uTex;
+  uniform sampler2D uPalette;
   uniform float uHalf;      // window half-size in cells
   uniform float uS;         // grid S
   uniform float uW;         // 2S+1
@@ -255,7 +332,6 @@ const FRAG = `
   uniform float uRevealRing;// ring index of the square front
   uniform float uHead;      // length (in spiral cells) of the glowing leading edge
   uniform vec3  uBg;
-  uniform vec3  uC1, uC2, uC3, uC4;
   void main() {
     float wx = vNdc.x * uHalf * uAspectX;
     float wy = vNdc.y * uHalf * uAspectY;
@@ -267,9 +343,8 @@ const FRAG = `
     float idx = floor(t.r * 255.0 + 0.5)
               + floor(t.g * 255.0 + 0.5) * 256.0
               + floor(t.b * 255.0 + 0.5) * 65536.0;
-    int occ = int(floor(t.a * 255.0 + 0.5));
+    float occ = floor(t.a * 255.0 + 0.5);
 
-    // Reveal test.
     bool shown = true;
     if (uMode == 1) shown = idx <= uReveal;
     else if (uMode == 2) {
@@ -279,11 +354,7 @@ const FRAG = `
 
     vec3 col = uBg;
     if (shown) {
-      if      (occ == 1) col = uC1;
-      else if (occ == 2) col = uC2;
-      else if (occ == 3) col = uC3;
-      else if (occ == 4) col = uC4;
-      // Glowing leading edge: cells laid within the last uHead spiral steps.
+      col = texture2D(uPalette, vec2((occ + 0.5) / 16.0, 0.5)).rgb; // texel 0 = bg
       if (uMode == 1) {
         float age = uReveal - idx;
         if (age >= 0.0 && age < uHead) {
@@ -322,12 +393,14 @@ gl.enableVertexAttribArray(aPos);
 gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
 const U = {};
-for (const name of ['uTex', 'uHalf', 'uS', 'uW', 'uAspectX', 'uAspectY', 'uFade',
-  'uMode', 'uReveal', 'uRevealRing', 'uHead', 'uBg', 'uC1', 'uC2', 'uC3', 'uC4']) {
+for (const name of ['uTex', 'uPalette', 'uHalf', 'uS', 'uW', 'uAspectX', 'uAspectY',
+  'uFade', 'uMode', 'uReveal', 'uRevealRing', 'uHead', 'uBg']) {
   U[name] = gl.getUniformLocation(program, name);
 }
 
+// Data texture (unit 0).
 const texture = gl.createTexture();
+gl.activeTexture(gl.TEXTURE0);
 gl.bindTexture(gl.TEXTURE_2D, texture);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -335,13 +408,20 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 gl.uniform1i(U.uTex, 0);
 
-function curPalette() { return PALETTES[paletteIdx % PALETTES.length]; }
+// Palette texture (unit 1) — 16×1 RGBA, persistent binding.
+const paletteTex = gl.createTexture();
+gl.activeTexture(gl.TEXTURE1);
+gl.bindTexture(gl.TEXTURE_2D, paletteTex);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.uniform1i(U.uPalette, 1);
+gl.activeTexture(gl.TEXTURE0);
 
-// Bake spiral number (RGB) + color id (A) per cell. Color is NOT baked — the
-// palette lives in shader uniforms, so changing palette costs nothing here.
+// Bake spiral number (RGB) + color id (A) per cell.
 function buildTexture() {
-  const S = gridS;
-  const W = 2 * S + 1;
+  const W = 2 * gridS + 1;
   const data = new Uint8Array(W * W * 4);
   for (let i = 0; i < W * W; i++) {
     const n = spiralIdx[i];
@@ -351,21 +431,39 @@ function buildTexture() {
     data[j + 2] = (n >> 16) & 255;
     data[j + 3] = occupant[i]; // 0 empty, else color id
   }
+  gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, W, W, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
 }
 
-// Re-run the simulation for the current piece/colors/extent, rebuild texture,
-// and restart the zoom from the center.
+// Fill the 16×1 palette texture: index 0 = bg, 1..N = generated colors.
+function buildPaletteTexture() {
+  const scheme = curPalette();
+  const N = Math.max(1, gridK);
+  const cols = genColors(scheme, N);
+  const data = new Uint8Array(16 * 4);
+  const bg = scheme.bg;
+  for (let i = 0; i < 16; i++) {
+    const c = (i >= 1 && i <= N) ? cols[i - 1] : bg;
+    data[i * 4] = c[0]; data[i * 4 + 1] = c[1]; data[i * 4 + 2] = c[2]; data[i * 4 + 3] = 255;
+  }
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, paletteTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 16, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+  gl.activeTexture(gl.TEXTURE0);
+}
+
+// Re-run the simulation for the current groups/extent, rebuild textures, and
+// (optionally) restart the zoom from the center.
 function rebuild(resetAnim = true) {
   const S = Math.max(8, Math.min(extent, MAX_S));
   if (S !== extent) extent = S;
-  const K = Math.max(2, Math.min(colors, 4));
-  if (K !== colors) colors = K;
-  simulate(S, K, piece);
+  normalizeGroups();
+  simulate(S);
   buildSpiralIndex(S);
   buildTexture();
-  console.log(`[knights] ${piece} ×${colors}, S=${gridS} (${(2 * gridS + 1) ** 2} cells) simulated in ${lastSimMs.toFixed(1)}ms`);
+  buildPaletteTexture();
+  console.log(`[knights] ${labelText()} — S=${gridS}, ${gridK} colors, ${(2 * gridS + 1) ** 2} cells in ${lastSimMs.toFixed(1)}ms`);
   if (resetAnim) { phase = 0; state = 'zoom'; stateT = 0; fade = 1; }
   updateDom();
   updateConfigLabel();
@@ -388,23 +486,18 @@ window.addEventListener('resize', resize);
 // =======================================================================
 // Animation state machine: zoom → hold → fadeout → fadein → zoom …
 // =======================================================================
-let phase = 0;          // 0..1 zoom progress
+let phase = 0;
 let state = 'zoom';
 let stateT = 0;
 let fade = 1;
 
-// From the zoom phase, derive the sweep head (a spiral number), the head
-// ring, and the window half-size that keeps the head just inside the frame.
 function currentReveal() {
   const S = gridS;
   const total = (2 * S + 1) * (2 * S + 1);
   const p = Math.min(Math.max(phase, 0), 1);
-  // Reveal count grows exponentially (1 → total): accelerating cells/sec.
-  const count = Math.max(1, Math.pow(total, p));
-  const headRing = (Math.sqrt(count) - 1) / 2;       // ring the sweep is on
+  const count = Math.max(1, Math.pow(total, p)); // exponential → accelerating
+  const headRing = (Math.sqrt(count) - 1) / 2;
   const half = Math.min(S, Math.max(H0, headRing * REVEAL_MARGIN + 0.5));
-  // Glowing edge ≈ a fraction of the current ring's perimeter, so it reads as a
-  // visible arc whether we're near the center or zoomed way out.
   const head = Math.max(10, headRing * 3);
   return { count, headRing, half, head };
 }
@@ -422,7 +515,6 @@ function advance(dt) {
     fade = 1 - Math.min(stateT / FADE_SEC, 1);
     if (stateT >= FADE_SEC) {
       fade = 0; phase = 0; state = 'fadein'; stateT = 0;
-      // Run finished: while fully black, swap to the next preset if cycling.
       if (cyclePresets) gotoNextPreset();
     }
   } else if (state === 'fadein') {
@@ -432,14 +524,12 @@ function advance(dt) {
   }
 }
 
-function rgb3(loc, c) { gl.uniform3f(loc, c[0] / 255, c[1] / 255, c[2] / 255); }
-
 function render() {
   resize();
   const aspect = canvas.width / canvas.height;
   const ax = aspect >= 1 ? aspect : 1;
   const ay = aspect >= 1 ? 1 : 1 / aspect;
-  const pal = curPalette();
+  const bg = curPalette().bg;
   const r = currentReveal();
   gl.useProgram(program);
   gl.uniform1f(U.uHalf, r.half);
@@ -452,11 +542,7 @@ function render() {
   gl.uniform1f(U.uReveal, r.count);
   gl.uniform1f(U.uRevealRing, r.headRing);
   gl.uniform1f(U.uHead, r.head);
-  rgb3(U.uBg, pal.bg);
-  rgb3(U.uC1, pal.colors[0]);
-  rgb3(U.uC2, pal.colors[1]);
-  rgb3(U.uC3, pal.colors[2] || pal.colors[0]);
-  rgb3(U.uC4, pal.colors[3] || pal.colors[0]);
+  gl.uniform3f(U.uBg, bg[0] / 255, bg[1] / 255, bg[2] / 255);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -466,6 +552,7 @@ function render() {
 // Control panel (house monospace-glass drawer; own identity)
 // =======================================================================
 const dom = {};
+let panelReady = false;
 const PANEL_CSS = `
   #drawer { position: fixed; top: 0; left: 0; height: 100vh; height: 100dvh; width: 280px;
     background: rgba(10, 12, 18, 0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -489,6 +576,7 @@ const PANEL_CSS = `
   #drawer-content h1 small { font-weight: 400; color: #888; margin-left: 0.4em; font-size: 11px; }
   #drawer-content h2 { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em;
     margin: 1.4rem 0 0.5rem; color: #888; }
+  .h2-aside { text-transform: none; letter-spacing: 0; color: #777; margin-left: 0.5rem; font-weight: 400; }
   .row { display: grid; grid-template-columns: 4.6rem 5.2rem 1fr; align-items: center; gap: 0.5rem;
     padding: 0.3rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
   .row:last-child { border-bottom: none; }
@@ -496,6 +584,21 @@ const PANEL_CSS = `
   .row .val { color: #fff; font-variant-numeric: tabular-nums; text-align: right; }
   .row .keys { justify-self: start; display: flex; align-items: center; gap: 6px; }
   .row .key-hint { font-size: 10px; color: #5b5b5b; letter-spacing: 0.05em; white-space: nowrap; }
+  .grp { border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 0.45rem 0.5rem; margin-bottom: 0.4rem; }
+  .grp-chips { display: flex; flex-wrap: wrap; gap: 0.2rem; }
+  .chip { font-family: inherit; font-size: 11px; padding: 0.2rem 0.4rem; border-radius: 3px; border: none;
+    background: rgba(255,255,255,0.05); color: #6a6a72; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .chip:hover { color: #ccc; }
+  .chip.on { background: rgba(156,204,255,0.22); color: #cfe6ff; }
+  .grp-foot { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.45rem; }
+  .grp-foot .grp-count { color: #9cf; font-variant-numeric: tabular-nums; min-width: 1.7rem; }
+  .grp-del { background: none; border: none; color: #666; cursor: pointer; font-family: inherit;
+    font-size: 13px; padding: 0 0.15rem; margin-left: auto; }
+  .grp-del:hover:not([disabled]) { color: #e66; }
+  .grp-del[disabled], .kbd-btn[disabled] { opacity: 0.3; cursor: default; }
+  .addgrp { display: block; width: 100%; margin: 0.5rem 0 0.2rem; padding: 0.35rem; border-radius: 3px;
+    background: rgba(255,255,255,0.05); color: #9cf; }
+  .addgrp[disabled] { opacity: 0.3; cursor: default; }
   .preset-pills { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.18rem; padding: 0.15rem 0 0.3rem; }
   .preset-pills .pill { font-family: inherit; font-size: 11.5px; background: rgba(255,255,255,0.05); color: #777;
     padding: 0.28rem 0.42rem; border-radius: 3px; min-width: 1rem; text-align: center; }
@@ -536,14 +639,15 @@ const PANEL_HTML = `
     <button id="drawer-toggle" tabindex="-1" aria-label="Toggle controls"></button>
     <div id="drawer-content">
       <h1>Knights <small>spiral</small></h1>
-      <h2>pattern</h2>
-      ${paramRow('piece', 'piece', '')}
-      ${paramRow('colors', 'colors', '')}
+      <h2>pieces <span id="v-total" class="h2-aside"></span></h2>
+      <div id="groups"></div>
+      <button class="addgrp" data-action="grp-add">+ add piece</button>
+      <h2>field</h2>
       ${paramRow('extent', 'extent', '[ ]')}
       <h2>motion</h2>
       ${paramRow('reveal', 'reveal', 'M')}
       ${paramRow('zoom', 'zoom', '← →')}
-      ${paramRow('palette', 'palette', '')}
+      ${paramRow('palette', 'palette', 'K')}
       <h2>preset</h2>
       <div class="row"><span class="label">preset</span><span id="v-preset" class="val accent" style="color:#9cf"></span></div>
       <div id="v-preset-pills" class="preset-pills"></div>
@@ -565,17 +669,15 @@ function injectCss(css) {
   document.head.appendChild(style);
 }
 
-// Persistent config label (piece + color count), styled like chrome.js's
-// toast. Independent of the panel so it shows in ?nopanel=1 screensaver mode.
-// z-index 5: above the canvas, below the drawer (10) so it tucks away when the
-// drawer is open.
+// Persistent config label (the piece groups), styled like chrome.js's toast.
+// Independent of the panel so it shows in ?nopanel=1 screensaver mode.
 const CONFIG_LABEL_CSS = `
   #kn-config { position: fixed; left: 1.1rem; bottom: 1.05rem; z-index: 5;
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 12px; color: #cdd; padding: 0.32rem 0.6rem;
+    font-size: 12px; color: #cdd; padding: 0.32rem 0.6rem; max-width: 70vw;
     background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 3px; pointer-events: none; white-space: nowrap;
-    letter-spacing: 0.02em; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+    border-radius: 3px; pointer-events: none; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; letter-spacing: 0.02em; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
 `;
 let configLabelEl = null;
 function buildConfigLabel() {
@@ -586,10 +688,103 @@ function buildConfigLabel() {
   updateConfigLabel();
 }
 function updateConfigLabel() {
-  if (configLabelEl) configLabelEl.textContent = `${PIECE_LABEL[piece] || piece} ×${colors}`;
+  if (configLabelEl) configLabelEl.textContent = labelText();
 }
 
 const suppressPanel = new URLSearchParams(location.search).get('nopanel') === '1';
+
+// --- group rows ---------------------------------------------------------
+function groupRowHtml(g, i, total) {
+  const incDis = total >= MAX_COLORS ? ' disabled' : '';
+  const decDis = g.count <= 1 ? ' disabled' : '';
+  const delDis = groups.length <= 1 ? ' disabled' : '';
+  const chips = PIECE_NAMES.map((p) =>
+    `<button class="chip${g.pieces.includes(p) ? ' on' : ''}" data-action="grp-chip" data-i="${i}" data-piece="${p}">${PIECE_LABEL[p] || p}</button>`).join('');
+  return `<div class="grp" data-i="${i}">` +
+    `<div class="grp-chips">${chips}</div>` +
+    `<div class="grp-foot"><span class="kbd-pair">` +
+    `<button class="kbd-btn" data-action="grp-count" data-i="${i}" data-dir="-1"${decDis}>−</button>` +
+    `<button class="kbd-btn" data-action="grp-count" data-i="${i}" data-dir="1"${incDis}>+</button></span>` +
+    `<span class="grp-count">×${g.count}</span>` +
+    `<button class="grp-del" data-action="grp-del" data-i="${i}"${delDis}>✕</button></div></div>`;
+}
+
+// Full re-render (structure changed: add/remove group, or preset applied).
+function renderGroups() {
+  const c = document.getElementById('groups');
+  if (!c) return;
+  const total = totalColors();
+  c.innerHTML = groups.map((g, i) => groupRowHtml(g, i, total)).join('');
+  const t = document.getElementById('v-total');
+  if (t) t.textContent = `${total} colors`;
+  const add = document.querySelector('.addgrp');
+  if (add) add.disabled = total >= MAX_COLORS;
+}
+
+// Lightweight in-place update (a piece/count changed; structure unchanged) so
+// held buttons aren't yanked out of the DOM mid-repeat.
+function refreshGroupStates() {
+  const cont = document.getElementById('groups');
+  if (!cont) return;
+  const total = totalColors();
+  const t = document.getElementById('v-total');
+  if (t) t.textContent = `${total} colors`;
+  for (const row of cont.querySelectorAll('.grp')) {
+    const i = Number(row.dataset.i);
+    const g = groups[i];
+    if (!g) continue;
+    for (const chip of row.querySelectorAll('.chip')) {
+      chip.classList.toggle('on', g.pieces.includes(chip.dataset.piece));
+    }
+    row.querySelector('.grp-count').textContent = `×${g.count}`;
+    const inc = row.querySelector('[data-action="grp-count"][data-dir="1"]');
+    const dec = row.querySelector('[data-action="grp-count"][data-dir="-1"]');
+    const del = row.querySelector('.grp-del');
+    if (inc) inc.disabled = total >= MAX_COLORS;
+    if (dec) dec.disabled = g.count <= 1;
+    if (del) del.disabled = groups.length <= 1;
+  }
+  const add = document.querySelector('.addgrp');
+  if (add) add.disabled = total >= MAX_COLORS;
+}
+
+function grpChip(i, piece) {
+  const g = groups[i];
+  if (!g || !PIECES[piece]) return;
+  if (g.pieces.includes(piece)) {
+    if (g.pieces.length <= 1) return; // keep at least one leaper
+    g.pieces = g.pieces.filter((p) => p !== piece);
+  } else {
+    g.pieces = sortPieces([...g.pieces, piece]);
+  }
+  refreshGroupStates();
+  rebuild();
+  syncPresetSelection();
+}
+function grpCount(i, dir) {
+  const g = groups[i];
+  if (!g) return;
+  if (dir > 0 && totalColors() >= MAX_COLORS) return;
+  if (dir < 0 && g.count <= 1) return;
+  g.count += dir;
+  refreshGroupStates();
+  rebuild();
+  syncPresetSelection();
+}
+function grpDel(i) {
+  if (groups.length <= 1) return;
+  groups.splice(i, 1);
+  renderGroups();
+  rebuild();
+  syncPresetSelection();
+}
+function grpAdd() {
+  if (totalColors() >= MAX_COLORS) return;
+  groups.push({ pieces: ['knight'], count: 1 });
+  renderGroups();
+  rebuild();
+  syncPresetSelection();
+}
 
 function buildPanel() {
   if (suppressPanel || document.getElementById('drawer')) return;
@@ -597,8 +792,6 @@ function buildPanel() {
   const parsed = new DOMParser().parseFromString(PANEL_HTML, 'text/html');
   document.body.appendChild(parsed.body.firstElementChild);
 
-  dom.piece = document.getElementById('v-piece');
-  dom.colors = document.getElementById('v-colors');
   dom.extent = document.getElementById('v-extent');
   dom.reveal = document.getElementById('v-reveal');
   dom.zoom = document.getElementById('v-zoom');
@@ -628,21 +821,30 @@ function buildPanel() {
     else if (a === 'copy') copyShareUrl();
     else if (a === 'fullscreen') window.toggleFullscreen?.();
     else if (a === 'hide') toggleDrawer();
+    else if (a === 'grp-chip') grpChip(Number(el.dataset.i), el.dataset.piece);
+    else if (a === 'grp-del') grpDel(Number(el.dataset.i));
+    else if (a === 'grp-add') grpAdd();
     else return;
     el.blur();
   });
 
-  // Hold an adjust button to auto-repeat.
+  // Hold an adjust / group cycler to auto-repeat. These update in place
+  // (no structural DOM swap) so the captured button survives the repeat.
   let holdDelay, holdInterval;
   const stopHold = () => { clearTimeout(holdDelay); clearInterval(holdInterval); };
+  const repeatable = '[data-action="adjust"],[data-action="grp-count"]';
+  const fire = (el) => {
+    const a = el.dataset.action, dir = Number(el.dataset.dir);
+    if (a === 'adjust') adjustParam(el.dataset.param, dir);
+    else if (a === 'grp-count') grpCount(Number(el.dataset.i), dir);
+  };
   content.addEventListener('pointerdown', (e) => {
-    const el = e.target.closest('[data-action="adjust"]');
-    if (!el) return;
+    const el = e.target.closest(repeatable);
+    if (!el || el.disabled) return;
     e.preventDefault();
-    const param = el.dataset.param, dir = Number(el.dataset.dir);
-    adjustParam(param, dir);
+    fire(el);
     el.setPointerCapture?.(e.pointerId);
-    holdDelay = setTimeout(() => { holdInterval = setInterval(() => adjustParam(param, dir), 120); }, 350);
+    holdDelay = setTimeout(() => { holdInterval = setInterval(() => fire(el), 120); }, 350);
   });
   content.addEventListener('pointerup', stopHold);
   content.addEventListener('pointercancel', stopHold);
@@ -661,6 +863,9 @@ function buildPanel() {
     });
     row.addEventListener('mouseleave', () => tooltip.classList.remove('visible'));
   }
+
+  panelReady = true;
+  renderGroups();
   updateDom();
 }
 
@@ -670,15 +875,14 @@ function toggleDrawer() {
 }
 
 function updateDom() {
-  if (!dom.piece) return;
-  dom.piece.textContent = piece;
-  dom.colors.textContent = String(colors);
+  if (!panelReady) return;
   dom.extent.textContent = String(extent);
   dom.reveal.textContent = reveal;
   dom.zoom.textContent = `${zoomSec}s`;
   dom.palette.textContent = curPalette().name;
   dom.preset.textContent = presets[presetIdx] ? presets[presetIdx].name : '—';
   if (dom.cycle) dom.cycle.textContent = cyclePresets ? 'on' : 'off';
+  refreshGroupStates();
   for (let i = 0; i < dom.presetPills.children.length; i++) {
     dom.presetPills.children[i].classList.toggle('active', i === presetIdx);
   }
@@ -691,12 +895,10 @@ function cycle(arr, cur, dir) {
 }
 
 function adjustParam(param, dir) {
-  if (param === 'piece') { piece = cycle(PIECE_NAMES, piece, dir); rebuild(); }
-  else if (param === 'colors') { colors = Math.max(2, Math.min(4, colors + dir)); rebuild(); }
-  else if (param === 'extent') { extent = Math.max(64, Math.min(MAX_S, extent + dir * stepExtent)); rebuild(); }
+  if (param === 'extent') { extent = Math.max(64, Math.min(MAX_S, extent + dir * stepExtent)); rebuild(); }
   else if (param === 'reveal') { reveal = cycle(REVEAL_MODES, reveal, dir); updateDom(); }
   else if (param === 'zoom') { zoomSec = Math.max(10, zoomSec + dir * stepZoom); updateDom(); }
-  else if (param === 'palette') { paletteIdx = (paletteIdx + dir + PALETTES.length) % PALETTES.length; updateDom(); }
+  else if (param === 'palette') { paletteIdx = (paletteIdx + dir + PALETTES.length) % PALETTES.length; buildPaletteTexture(); updateDom(); }
   syncPresetSelection();
 }
 
@@ -704,22 +906,26 @@ function pickPreset(i) {
   const p = presets[i];
   if (!p) return;
   presetIdx = i;
-  piece = p.piece; colors = p.colors; paletteIdx = p.paletteIdx;
+  groups = cloneGroups(p.groups);
+  paletteIdx = p.paletteIdx;
+  renderGroups();
   rebuild();
 }
 
 function syncPresetSelection() {
-  presetIdx = presets.findIndex((p) => p.piece === piece && p.colors === colors && p.paletteIdx === paletteIdx);
-  if (dom.preset) updateDom();
+  presetIdx = presets.findIndex((p) => p.paletteIdx === paletteIdx && groupsEqual(p.groups, groups));
+  if (panelReady) updateDom();
 }
 
-// Advance to the next preset's pattern without resetting the fade/zoom state —
-// called at the black moment between runs when cycling is on.
+// Advance to the next preset without resetting the fade/zoom state — called at
+// the black moment between runs when cycling is on.
 function gotoNextPreset() {
   const i = presetIdx < 0 ? 0 : (presetIdx + 1) % presets.length;
   const p = presets[i];
   presetIdx = i;
-  piece = p.piece; colors = p.colors; paletteIdx = p.paletteIdx;
+  groups = cloneGroups(p.groups);
+  paletteIdx = p.paletteIdx;
+  renderGroups();
   rebuild(false);
 }
 
@@ -734,20 +940,29 @@ function restart() { phase = 0; state = 'zoom'; stateT = 0; fade = 1; }
 // --- URL params ---------------------------------------------------------
 function applyUrlParams() {
   const q = new URLSearchParams(location.search);
-  if (q.has('piece') && PIECES[q.get('piece')]) piece = q.get('piece');
-  if (q.has('colors')) colors = Math.max(2, Math.min(4, parseInt(q.get('colors'), 10) || colors));
+  if (q.has('groups')) {
+    // groups=knight-zebra:2,wazir:1  (pieces joined by -, count after :)
+    // ('-' not '+': in a query string '+' decodes to a space.)
+    const parsed = [];
+    for (const part of q.get('groups').split(',')) {
+      const [pcs, ct] = part.split(':');
+      const pieces = sortPieces((pcs || '').split('-'));
+      if (pieces.length) parsed.push({ pieces, count: Math.max(1, parseInt(ct, 10) || 1) });
+    }
+    if (parsed.length) groups = parsed;
+  }
   if (q.has('extent')) extent = Math.max(64, Math.min(MAX_S, parseInt(q.get('extent'), 10) || extent));
   if (q.has('zoom')) zoomSec = Math.max(10, parseInt(q.get('zoom'), 10) || zoomSec);
   if (q.has('palette')) paletteIdx = (parseInt(q.get('palette'), 10) || 0) % PALETTES.length;
   if (q.has('reveal') && REVEAL_MODES.includes(q.get('reveal'))) reveal = q.get('reveal');
   if (q.has('start')) startPhase = Math.max(0, Math.min(1, parseFloat(q.get('start')) || 0));
   if (q.get('cycle') === '1') cyclePresets = true;
+  normalizeGroups();
 }
 
 function copyShareUrl() {
   const q = new URLSearchParams();
-  q.set('piece', piece);
-  q.set('colors', String(colors));
+  q.set('groups', groups.map((g) => `${g.pieces.join('-')}:${g.count}`).join(','));
   q.set('extent', String(extent));
   q.set('zoom', String(zoomSec));
   q.set('palette', String(paletteIdx));
@@ -768,7 +983,6 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowRight') adjustParam('zoom', 1);
   else if (e.key === '[') adjustParam('extent', -1);
   else if (e.key === ']') adjustParam('extent', 1);
-  else if (e.key === 'p' || e.key === 'P') adjustParam('piece', 1);
   else if (e.key === 'k' || e.key === 'K') adjustParam('palette', 1);
   else if (e.key === 'm' || e.key === 'M') adjustParam('reveal', 1);
   else if (e.key === 'l' || e.key === 'L') toggleCycle();
@@ -803,7 +1017,6 @@ function tick(now) {
   last = now;
   advance(dt);
   render();
-  if (dom.piece && (state === 'zoom')) { /* live values are static; no per-frame DOM churn */ }
   requestAnimationFrame(tick);
 }
 document.addEventListener('visibilitychange', () => {

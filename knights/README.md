@@ -4,13 +4,20 @@ A spiral coloring screensaver from Numberphile's **"Red & Black Knights
 (extraordinary result)"** (Neil Sloane & Jonas Karlsson, May 2026) and its
 follow-up *"Amazing Chessboard Patterns."*
 
-Cells of an infinite square spiral are claimed by `K` colors of knights taking
+Cells of an infinite square spiral are claimed by `K` colors of pieces taking
 turns. On a color's turn it grabs the lowest-numbered cell that is **not
-occupied and not attacked by any *other* color** — same-color knights *are*
+occupied and not attacked by any *other* color** — same-color pieces *are*
 allowed to attack each other, and that asymmetry is what breeds the large-scale
-structure. With knights and 2+ colors the plane splits into colored regions
-with chaotic bands along the axes; the interesting structure only emerges past
-~100k–1M+ placed cells.
+structure. With 2+ colors the plane splits into colored regions with chaotic
+bands along the axes; the interesting structure only emerges past ~100k–1M+
+placed cells.
+
+Colors are configured as **PIECE-SET × COUNT groups** — each group is a set of
+leapers (a *compound* piece whose moves are the union) and how many color-slots
+use it; the total colors are the sum. One group (`Knight × 3`) is the classic
+3-color knight; several groups reproduce the Numberphile2 per-piece combos
+(e.g. `Knight × 2 · Zebra × 1`); a multi-leaper group is a compound piece
+(e.g. `Knight+Zebra × 3`). Total colors are capped at 8.
 
 The whole pattern is simulated once into a grid (≈70 ms for the ~1M-cell
 default) and baked into a single texture. A raw-WebGL fragment shader then
@@ -31,26 +38,26 @@ Open the drawer (the `›` tab on the left edge) to tune:
 
 | Param | What it does |
 | --- | --- |
-| **piece** | Which `(m,n)` leaper the knights are — knight `(2,1)`, camel `(3,1)`, zebra `(3,2)`, antelope `(4,3)`, giraffe `(4,1)`, fers `(1,1)`, vazir `(1,0)`. Each gives a different pattern. |
-| **colors** | Number of knight colors taking turns (2–4). 2 is the classic Red & Black; 3 is the most interesting. |
+| **pieces** | The PIECE-SET × COUNT groups. In each group, tap leaper chips to include them (their moves union into one compound piece), set how many colors use it (`− +`); `✕` removes the group, *+ add piece* adds one. Roster: knight `(2,1)`, wazir `(1,0)`, ferz `(1,1)`, dabbaba `(2,0)`, alfil `(2,2)`, three-leaper `(3,0)`, zebra `(3,2)`, antelope `(4,3)`. Total colors 2–8. |
 | **extent** | How far the spiral is computed (max shell). Bigger reveals more pattern; costs more to simulate. |
 | **reveal** | How cells appear: `spiral` (point sweeps the spiral with a glowing head), `square` (whole rings pop in), `all` (finished pattern, just zoomed). |
 | **zoom** | Seconds for one full zoom-out. |
-| **palette** | Color scheme. |
+| **palette** | Color scheme (colors are generated to evenly span the hue wheel for however many colors the groups total). |
 | **cycle** (`L`) | When on, advance to the next preset each time a run finishes (rotating through the whole preset roster). |
 
-Keys: `←/→` zoom speed, `[ ]` extent, `P` cycle piece, `K` cycle palette, `M`
-cycle reveal mode, `L` toggle preset cycling, `1–9` presets, `R` restart zoom,
-`C` copy screensaver URL, `F` fullscreen, `H` hide panel.
+Keys: `←/→` zoom speed, `[ ]` extent, `K` cycle palette, `M` cycle reveal mode,
+`L` toggle preset cycling, `1–9` presets, `R` restart zoom, `C` copy screensaver
+URL, `F` fullscreen, `H` hide panel. (Piece groups are mouse/touch-only.)
 
 ## URL params (for autoplay / screensaver use)
 
-`piece`, `colors`, `extent`, `zoom`, `palette`, `reveal`, `start`
-(initial zoom phase 0–1, to resume mid-sweep), `cycle=1` (rotate through
-presets), and `nopanel=1` (hide the panel). `C` / *copy screensaver URL*
-builds a URL reproducing the current settings, e.g.:
+`groups` (pieces joined by `-`, count after `:`, groups comma-separated — e.g.
+`groups=knight-zebra:2,wazir:1`), `extent`, `zoom`, `palette`, `reveal`,
+`start` (initial zoom phase 0–1, to resume mid-sweep), `cycle=1` (rotate through
+presets), and `nopanel=1` (hide the panel). `C` / *copy screensaver URL* builds
+a URL reproducing the current settings, e.g.:
 
-`https://chrismo.github.io/screensavers/knights/?piece=knight&colors=3&extent=512&zoom=90&palette=0&reveal=spiral&nopanel=1`
+`https://chrismo.github.io/screensavers/knights/?groups=knight-zebra:2,wazir:1&extent=512&zoom=90&palette=0&reveal=spiral&nopanel=1`
 
 ## References
 
