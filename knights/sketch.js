@@ -191,7 +191,7 @@ let presetIdx = 0;
 
 const helpText = {
   extent: 'How far the spiral is computed (max shell). Bigger reveals more of the large-scale pattern but costs more to simulate.',
-  zoom:   'Seconds for one full zoom-out from the center cell to the full extent.',
+  zoom:   'Seconds for one full zoom-out from the center cell to the full extent. 0 = hold on the finished image (no animation) — handy for inspecting combos.',
   reveal: 'How cells appear. spiral = a point sweeps the numbering spiral, laying color with a glowing head. square = whole rings pop in. all = the finished pattern, just zoomed.',
   palette: 'Color scheme. Colors are generated to evenly span the hue wheel for however many colors the groups add up to.',
 };
@@ -496,6 +496,9 @@ let fade = 1;
 function currentReveal() {
   const S = gridS;
   const total = (2 * S + 1) * (2 * S + 1);
+  // zoom = 0 → hold on the finished image: everything shown, full extent, no
+  // sweep head (head = 0 disables the glow).
+  if (zoomSec <= 0) return { count: total, headRing: S, half: S, head: 0 };
   const p = Math.min(Math.max(phase, 0), 1);
   const count = Math.max(1, Math.pow(total, p)); // exponential → accelerating
   const headRing = (Math.sqrt(count) - 1) / 2;
@@ -505,6 +508,7 @@ function currentReveal() {
 }
 
 function advance(dt) {
+  if (zoomSec <= 0) { phase = 1; fade = 1; return; } // static hold on final image
   if (state === 'zoom') {
     phase += dt / Math.max(1, zoomSec);
     fade = 1;
@@ -890,7 +894,7 @@ function updateDom() {
   if (!panelReady) return;
   dom.extent.textContent = String(extent);
   dom.reveal.textContent = reveal;
-  dom.zoom.textContent = `${zoomSec}s`;
+  dom.zoom.textContent = zoomSec === 0 ? 'hold' : `${zoomSec}s`;
   dom.palette.textContent = curPalette().name;
   dom.preset.textContent = presets[presetIdx] ? presets[presetIdx].name : '—';
   if (dom.cycle) dom.cycle.textContent = cyclePresets ? 'on' : 'off';
@@ -908,7 +912,7 @@ function cycle(arr, cur, dir) {
 function adjustParam(param, dir) {
   if (param === 'extent') { extent = Math.max(64, Math.min(MAX_S, extent + dir * stepExtent)); rebuild(); }
   else if (param === 'reveal') { reveal = cycle(REVEAL_MODES, reveal, dir); updateDom(); }
-  else if (param === 'zoom') { zoomSec = Math.max(10, zoomSec + dir * stepZoom); updateDom(); }
+  else if (param === 'zoom') { zoomSec = Math.max(0, zoomSec + dir * stepZoom); updateDom(); }
   else if (param === 'palette') { paletteIdx = (paletteIdx + dir + PALETTES.length) % PALETTES.length; buildPaletteTexture(); renderGroups(); updateDom(); }
   syncPresetSelection();
 }
@@ -963,7 +967,7 @@ function applyUrlParams() {
     if (parsed.length) groups = parsed;
   }
   if (q.has('extent')) extent = Math.max(64, Math.min(MAX_S, parseInt(q.get('extent'), 10) || extent));
-  if (q.has('zoom')) zoomSec = Math.max(10, parseInt(q.get('zoom'), 10) || zoomSec);
+  if (q.has('zoom')) { const z = parseInt(q.get('zoom'), 10); if (!Number.isNaN(z)) zoomSec = Math.max(0, z); }
   if (q.has('palette')) paletteIdx = (parseInt(q.get('palette'), 10) || 0) % PALETTES.length;
   if (q.has('reveal') && REVEAL_MODES.includes(q.get('reveal'))) reveal = q.get('reveal');
   if (q.has('start')) startPhase = Math.max(0, Math.min(1, parseFloat(q.get('start')) || 0));
@@ -988,6 +992,7 @@ function copyShareUrl() {
 // --- keyboard -----------------------------------------------------------
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return; // let Cmd+R, Cmd+L, etc. through
   const isAdjust = ['ArrowLeft', 'ArrowRight', '[', ']'].includes(e.key);
   if (e.repeat && !isAdjust) return;
   if (e.key === 'ArrowLeft') adjustParam('zoom', -1);
