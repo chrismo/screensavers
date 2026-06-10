@@ -18,6 +18,14 @@ canonical autoplay form for screensaver use adds `?nopanel=1&lerp=1`
   controls and URL params.
   Live: https://chrismo.github.io/screensavers/knights/
 
+## Labs
+
+- [knights-lab/](knights-lab/) — "how it's built": a companion to `knights/`
+  that replays the actual turn-based solve, narrating each placement decision
+  while zoomed in, then accelerating and interleaving to fill the field. See
+  [knights-lab/README.md](knights-lab/README.md) for controls and URL params.
+  Live: https://chrismo.github.io/screensavers/knights-lab/
+
 ## Running as a screensaver / desktop
 
 Open a sketch, tune the panel to taste, press `C` (or click *copy
