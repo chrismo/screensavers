@@ -138,7 +138,7 @@ function leaperOffsets(piece) {
 }
 
 // Bump the MINOR on each change so the panel shows when a new build has loaded.
-const VERSION = '1.9';
+const VERSION = '1.10';
 
 // =======================================================================
 // Live params (URL-overridable, panel-tunable)
@@ -268,6 +268,7 @@ let colorLabel = [];     // per-color piece label (group expanded)
 let field = null;        // offscreen canvas, 1px per cell (the committed field)
 let fieldCtx = null;
 let occGrid = null;      // Int8Array board (0 empty else color+1) — for attacker lookups
+let threatGrid = null;   // Uint8Array bitmask — bit j set = color j attacks this cell (the danger map)
 let cursors = [];        // per-color last placement {x,y} — the "where it left off" markers
 let cssW = 0, cssH = 0, dpr = 1;
 
@@ -312,10 +313,23 @@ function paintCell(e) {
   fieldCtx.fillRect(e.x + sim.S, sim.S - e.y, 1, 1); // row = S - y → +y points up
 }
 
+// Stamp the cells a color-k piece at (x,y) attacks (by ITS shape) into the threat
+// bitmask — exactly how the solver builds it; this IS the danger map's data.
+function stampThreat(k, x, y) {
+  if (!threatGrid || !sim.colorOffs) return;
+  const offs = sim.colorOffs[k], bit = 1 << k, S = sim.S, W = sim.W;
+  for (let o = 0; o < offs.length; o++) {
+    const tx = x + offs[o][0], ty = y + offs[o][1];
+    if (tx < -S || tx > S || ty < -S || ty > S) continue;
+    threatGrid[(ty + S) * W + (tx + S)] |= bit;
+  }
+}
+
 function commit(e) {
   if (e.t !== 'p') return;
   paintCell(e);
   if (occGrid) occGrid[(e.y + sim.S) * sim.W + (e.x + sim.S)] = e.k + 1;
+  stampThreat(e.k, e.x, e.y);
   cursors[e.k] = { x: e.x, y: e.y };
   const r = Math.max(Math.abs(e.x), Math.abs(e.y));
   if (r > maxR) maxR = r;
@@ -342,6 +356,7 @@ function commitNarrated(e) {
 function repaintField(n) {
   fieldCtx.clearRect(0, 0, field.width, field.height);
   if (occGrid) occGrid.fill(0);
+  if (threatGrid) threatGrid.fill(0);
   cursors = new Array(sim.K).fill(null);
   maxR = 0;
   for (let i = 0; i < n; i++) {
@@ -350,6 +365,7 @@ function repaintField(n) {
     fieldCtx.fillStyle = colorStr(e.k);
     fieldCtx.fillRect(e.x + sim.S, sim.S - e.y, 1, 1);
     if (occGrid) occGrid[(e.y + sim.S) * sim.W + (e.x + sim.S)] = e.k + 1;
+    stampThreat(e.k, e.x, e.y);
     cursors[e.k] = { x: e.x, y: e.y };
     const r = Math.max(Math.abs(e.x), Math.abs(e.y));
     if (r > maxR) maxR = r;
@@ -385,6 +401,7 @@ function rebuild(resetRun = true) {
   fieldCtx = field.getContext('2d');
   fieldCtx.imageSmoothingEnabled = false;
   occGrid = new Int8Array(sim.W * sim.W);
+  threatGrid = new Uint8Array(sim.W * sim.W);
   cursors = new Array(sim.K).fill(null);
   console.log(`[knights-lab] ${labelText()} — S=${sim.S}, ${sim.K} colors, ${sim.events.length} events in ${lastSimMs.toFixed(1)}ms`);
   if (resetRun) startRun();
@@ -399,6 +416,7 @@ function startRun() {
   runState = 'run'; stateT = 0; fade = 1; paused = false;
   evalPos = 0; xMarks = []; pings = []; animClock = 0;
   if (occGrid) occGrid.fill(0);
+  if (threatGrid) threatGrid.fill(0);
   cursors = new Array(sim.K).fill(null);
   if (fieldCtx) fieldCtx.clearRect(0, 0, field.width, field.height); // wipe the old render
   if (startFrac > 0 && sim.events.length) {
@@ -480,16 +498,21 @@ function draw() {
   const dy = originY - (sim.S + 0.5) * cellPx;
   ctx.drawImage(field, dx, dy, dw, dw);
 
+  // Narrating this frame? (gates both the danger map and the step overlay)
+  const narrate = runState === 'run' && cellPx >= NARRATE_PX && head < sim.events.length &&
+    (paused || introActive() || rateAt(clock) <= NARRATE_RATE_MAX);
+  const activeK = sim.events[head] ? sim.events[head].k : 0;
+
+  // Danger map: where the active mover can't go (enemy fire), in attacker colors.
+  if (narrate) drawDangerMap(cellPx, originX, originY, activeK);
+
   // Lingering conflict ✕ marks (fade over time; cleared when a cell fills).
   drawXMarks(cellPx, originX, originY);
 
   // Persistent per-color markers: where each color last left off.
   drawCursorMarkers(cellPx, originX, originY);
 
-  // Overlay: narrate the active decision while zoomed in, during the intro or
-  // while the placement rate is still slow enough to read.
-  const narrate = runState === 'run' && cellPx >= NARRATE_PX && head < sim.events.length &&
-    (paused || introActive() || rateAt(clock) <= NARRATE_RATE_MAX);
+  // The active decision overlay: move boxes (my reach), attacker lines, cursor.
   if (narrate) drawNarration(sim.events[head], cellPx, originX, originY);
 
   // One-time sonar ring on each just-placed cell (springs out, fades, gone).
@@ -517,6 +540,32 @@ function drawGrid(cellPx, originX, originY) {
   for (let gx = -visX; gx <= visX + 1; gx++) { const sx = originX + (gx - 0.5) * cellPx; ctx.moveTo(sx, 0); ctx.lineTo(sx, cssH); }
   for (let gy = -visY; gy <= visY + 1; gy++) { const sy = originY - (gy - 0.5) * cellPx; ctx.moveTo(0, sy); ctx.lineTo(cssW, sy); }
   ctx.stroke();
+}
+
+// The danger map: every EMPTY cell an enemy of the active mover (color k) attacks,
+// tinted faintly in the attacker's color. Read straight off the threat bitmask —
+// the same field the solver builds — so it's shape-correct for any roster. The
+// cursor's job is to find the first empty cell with no tint.
+function drawDangerMap(cellPx, originX, originY, k) {
+  if (!threatGrid || !occGrid) return;
+  const S = sim.S, W = sim.W;
+  const notK = (~(1 << k)) & 0xff; // ignore the mover's own attacks (same-color is legal)
+  const visX = Math.min(S, Math.ceil(cssW / cellPx / 2) + 1);
+  const visY = Math.min(S, Math.ceil(cssH / cellPx / 2) + 1);
+  for (let gy = -visY; gy <= visY; gy++) {
+    for (let gx = -visX; gx <= visX; gx++) {
+      const id = (gy + S) * W + (gx + S);
+      if (occGrid[id] !== 0) continue;     // occupied cells are skipped on occupancy alone
+      const mask = threatGrid[id] & notK;
+      if (!mask) continue;
+      let j = -1;
+      for (let b = 0; b < sim.K; b++) { if (mask & (1 << b)) { j = b; break; } }
+      const c = palCols[j] || [230, 90, 90];
+      const l = originX + (gx - 0.5) * cellPx, t = originY - (gy + 0.5) * cellPx;
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},0.2)`;
+      ctx.fillRect(l, t, cellPx, cellPx);
+    }
+  }
 }
 
 // Draw the active decision: the cursor walking the spiral through every cell it
