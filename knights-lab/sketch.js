@@ -138,7 +138,7 @@ function leaperOffsets(piece) {
 }
 
 // Bump the MINOR on each change so the panel shows when a new build has loaded.
-const VERSION = '1.3';
+const VERSION = '1.9';
 
 // =======================================================================
 // Live params (URL-overridable, panel-tunable)
@@ -153,7 +153,12 @@ let cyclePresets = false;
 const TAU = 6.0;             // seconds; placement rate ≈ speed·e^(t/TAU) (bigger = gentler ramp)
 const NARRATE_PX = 22;       // cell px above which we draw the step overlay
 const NARRATE_RATE_MAX = 10; // placements/sec above which narration is too fast
-const DETAIL_CAP = 300;      // record skip/threat detail for only the first N events
+const DETAIL_CAP = 300;      // record scan/threat detail for only the first N events
+const SCAN_CAP = 600;        // max recorded evaluations per turn (detail events)
+const EVAL_EVENTS = 12;      // first N placements play eval-by-eval (slow intro)
+const EVAL_PER_SEC = 14;     // cursor evaluations per second during the intro
+const XMARK_FADE = 2.6;      // seconds a conflict ✕ lingers after the cursor passes it
+const PING_DUR = 0.7;        // sonar ping lifetime (s)
 const H0 = 5;                // min half-window (cells) — opening zoom shows ~11 cells
 const MARGIN = 1.15;         // keep the frontier this far inside the frame
 const HALF_EASE = 2.2;       // half-window easing toward target (per second)
@@ -215,20 +220,19 @@ function solveSteps(S) {
       let x = cx[k], y = cy[k];
       const notK = (~(1 << k)) & 0xff;
       const detail = events.length < DETAIL_CAP;
-      const skipped = detail ? [] : null;
+      const scan = detail ? [] : null; // every cell the cursor evaluated and rejected
       let off = false;
       while (true) {
         if (x > S || x < -S || y > S || y < -S) { done[k] = true; remaining--; off = true; break; }
         const id = idx(x, y);
         if (occ[id] === 0 && (threat[id] & notK) === 0) break;
-        if (detail) {
-          if (occ[id] !== 0) skipped.push({ x, y, kind: 'occ', by: occ[id] - 1 });
+        if (detail && scan.length < SCAN_CAP) {
+          if (occ[id] !== 0) scan.push({ x, y, kind: 'occ', by: occ[id] - 1 });
           else {
             let by = -1;
             for (let b = 0; b < K; b++) { if (b !== k && (threat[id] & (1 << b))) { by = b; break; } }
-            skipped.push({ x, y, kind: 'threat', by });
+            scan.push({ x, y, kind: 'threat', by });
           }
-          if (skipped.length > 6) skipped.shift(); // keep the last few (nearest the landing)
         }
         const nxt = spiralStep(x, y);
         x = nxt[0]; y = nxt[1];
@@ -245,11 +249,11 @@ function solveSteps(S) {
         const tx = x + offs[o][0], ty = y + offs[o][1];
         if (inGrid(tx, ty)) { threat[idx(tx, ty)] |= bit; if (detail) threats.push([tx, ty]); }
       }
-      events.push(detail ? { t: 'p', k, x, y, skipped, threats } : { t: 'p', k, x, y });
+      events.push(detail ? { t: 'p', k, x, y, scan, threats } : { t: 'p', k, x, y });
     }
   }
   lastSimMs = performance.now() - t0;
-  return { events, K, S, W };
+  return { events, K, S, W, colorOffs }; // colorOffs lets the renderer resolve attackers
 }
 
 // =======================================================================
@@ -263,6 +267,8 @@ let palCols = [];        // [r,g,b] per color
 let colorLabel = [];     // per-color piece label (group expanded)
 let field = null;        // offscreen canvas, 1px per cell (the committed field)
 let fieldCtx = null;
+let occGrid = null;      // Int8Array board (0 empty else color+1) — for attacker lookups
+let cursors = [];        // per-color last placement {x,y} — the "where it left off" markers
 let cssW = 0, cssH = 0, dpr = 1;
 
 // --- run/animation state ------------------------------------------------
@@ -275,6 +281,23 @@ let runState = 'run';    // run → hold → fadeout → fadein → run
 let stateT = 0;
 let fade = 1;
 let paused = false;
+let evalPos = 0;         // fractional eval index within the current placement (intro)
+let xMarks = [];         // lingering conflict ✕ marks: { x, y, by, t }
+let pings = [];          // sonar rings on just-placed cells: { x, y, t }
+let animClock = 0;       // advances only while running — ages xMarks/pings
+let uiClock = 0;         // always advances — drives the paused-marker pulse
+
+function introActive() { return head < EVAL_EVENTS; }       // slow eval-by-eval opening
+function evalLen(e) { return (e && e.t === 'p' && e.scan) ? e.scan.length + 1 : 1; }
+
+// The eval position drawNarration is currently showing — used to snap evalPos on
+// pause so manual stepping picks up exactly where the live crawl was.
+function currentEp() {
+  const e = sim.events[head];
+  const scanLen = (e && e.scan) ? e.scan.length : 0;
+  if (introActive()) return Math.max(0, Math.min(scanLen + 1, evalPos));
+  return Math.min(scanLen + 1, acc * (scanLen + 1));
+}
 
 function colorStr(k) { const c = palCols[k] || [200, 200, 200]; return `rgb(${c[0]},${c[1]},${c[2]})`; }
 function bgStr() { const b = curPalette().bg; return `rgb(${b[0]},${b[1]},${b[2]})`; }
@@ -292,20 +315,42 @@ function paintCell(e) {
 function commit(e) {
   if (e.t !== 'p') return;
   paintCell(e);
+  if (occGrid) occGrid[(e.y + sim.S) * sim.W + (e.x + sim.S)] = e.k + 1;
+  cursors[e.k] = { x: e.x, y: e.y };
   const r = Math.max(Math.abs(e.x), Math.abs(e.y));
   if (r > maxR) maxR = r;
+}
+
+// Commit + the narration side-effects: a sonar ping on the placed cell, and the
+// turn's conflict cells stamped as lingering ✕ marks (cleared if later filled).
+function commitNarrated(e) {
+  commit(e);
+  if (e.t !== 'p') return;
+  pings.push({ x: e.x, y: e.y, t: uiClock }); // uiClock advances even while paused
+  if (pings.length > 8) pings.shift();
+  for (let i = xMarks.length - 1; i >= 0; i--) {
+    if (xMarks[i].x === e.x && xMarks[i].y === e.y) xMarks.splice(i, 1); // this cell is filled now
+  }
+  if (e.scan) {
+    for (const s of e.scan) if (s.kind === 'threat') xMarks.push({ x: s.x, y: s.y, by: s.by, t: animClock });
+    while (xMarks.length > 220) xMarks.shift();
+  }
 }
 
 // Replay events [0, n) into a fresh field (used on palette change / step-back /
 // ?start=). Recomputes maxR.
 function repaintField(n) {
   fieldCtx.clearRect(0, 0, field.width, field.height);
+  if (occGrid) occGrid.fill(0);
+  cursors = new Array(sim.K).fill(null);
   maxR = 0;
   for (let i = 0; i < n; i++) {
     const e = sim.events[i];
     if (e.t !== 'p') continue;
     fieldCtx.fillStyle = colorStr(e.k);
     fieldCtx.fillRect(e.x + sim.S, sim.S - e.y, 1, 1);
+    if (occGrid) occGrid[(e.y + sim.S) * sim.W + (e.x + sim.S)] = e.k + 1;
+    cursors[e.k] = { x: e.x, y: e.y };
     const r = Math.max(Math.abs(e.x), Math.abs(e.y));
     if (r > maxR) maxR = r;
   }
@@ -339,6 +384,8 @@ function rebuild(resetRun = true) {
   field.width = sim.W; field.height = sim.W;
   fieldCtx = field.getContext('2d');
   fieldCtx.imageSmoothingEnabled = false;
+  occGrid = new Int8Array(sim.W * sim.W);
+  cursors = new Array(sim.K).fill(null);
   console.log(`[knights-lab] ${labelText()} — S=${sim.S}, ${sim.K} colors, ${sim.events.length} events in ${lastSimMs.toFixed(1)}ms`);
   if (resetRun) startRun();
   updateDom();
@@ -350,6 +397,9 @@ function rebuild(resetRun = true) {
 function startRun() {
   head = 0; clock = 0; acc = 0; maxR = 0; half = H0;
   runState = 'run'; stateT = 0; fade = 1; paused = false;
+  evalPos = 0; xMarks = []; pings = []; animClock = 0;
+  if (occGrid) occGrid.fill(0);
+  cursors = new Array(sim.K).fill(null);
   if (fieldCtx) fieldCtx.clearRect(0, 0, field.width, field.height); // wipe the old render
   if (startFrac > 0 && sim.events.length) {
     head = Math.min(sim.events.length, Math.floor(startFrac * sim.events.length));
@@ -364,15 +414,31 @@ function startRun() {
 // =======================================================================
 function update(dt) {
   const total = sim.events.length;
+  uiClock += dt;
   if (runState === 'run' && !paused) {
-    clock += dt;
-    acc += rateAt(clock) * dt;
-    let n = Math.floor(acc);
-    if (n > 0) {
-      acc -= n;
-      n = Math.min(n, total - head);
-      for (let i = 0; i < n; i++) commit(sim.events[head++]);
+    animClock += dt;
+    if (introActive()) {
+      // Slow opening: walk the cursor through every evaluation, one at a time.
+      evalPos += EVAL_PER_SEC * dt;
+      let guard = 0;
+      while (head < total && evalPos >= evalLen(sim.events[head])) {
+        evalPos -= evalLen(sim.events[head]);
+        commitNarrated(sim.events[head++]);
+        if (!introActive()) { clock = timeForPlayed(head); evalPos = 0; break; }
+        if (++guard > 4000) break;
+      }
+    } else {
+      clock += dt;
+      acc += rateAt(clock) * dt;
+      let n = Math.floor(acc);
+      if (n > 0) {
+        acc -= n;
+        n = Math.min(n, total - head);
+        for (let i = 0; i < n; i++) commitNarrated(sim.events[head++]);
+      }
     }
+    // Age out lingering ✕ marks (frozen while paused so they can be studied).
+    if (xMarks.length) xMarks = xMarks.filter((m) => animClock - m.t < XMARK_FADE);
     if (head >= total) { runState = 'hold'; stateT = 0; }
   } else if (runState === 'hold') {
     stateT += dt; fade = 1;
@@ -389,6 +455,9 @@ function update(dt) {
     fade = Math.min(stateT / FADE_SEC, 1);
     if (stateT >= FADE_SEC) { runState = 'run'; stateT = 0; }
   }
+
+  // Sonar pings age on uiClock so a step's ring springs out and fades while paused.
+  if (pings.length) pings = pings.filter((p) => uiClock - p.t < PING_DUR);
 
   // Ease the half-window toward the frontier (only ever zooms out).
   const target = Math.max(H0, Math.min(sim.S, maxR * MARGIN + 0.5));
@@ -411,10 +480,20 @@ function draw() {
   const dy = originY - (sim.S + 0.5) * cellPx;
   ctx.drawImage(field, dx, dy, dw, dw);
 
-  // Overlay: narrate the active decision while zoomed in and slow enough.
-  const narrate = runState === 'run' && cellPx >= NARRATE_PX &&
-    (paused || rateAt(clock) <= NARRATE_RATE_MAX) && head < sim.events.length;
-  if (narrate) drawNarration(sim.events[head], paused ? 0.5 : acc, cellPx, originX, originY);
+  // Lingering conflict ✕ marks (fade over time; cleared when a cell fills).
+  drawXMarks(cellPx, originX, originY);
+
+  // Persistent per-color markers: where each color last left off.
+  drawCursorMarkers(cellPx, originX, originY);
+
+  // Overlay: narrate the active decision while zoomed in, during the intro or
+  // while the placement rate is still slow enough to read.
+  const narrate = runState === 'run' && cellPx >= NARRATE_PX && head < sim.events.length &&
+    (paused || introActive() || rateAt(clock) <= NARRATE_RATE_MAX);
+  if (narrate) drawNarration(sim.events[head], cellPx, originX, originY);
+
+  // One-time sonar ring on each just-placed cell (springs out, fades, gone).
+  drawPings(cellPx, originX, originY);
 
   if (fade < 1) {
     ctx.globalAlpha = 1 - fade;
@@ -440,59 +519,194 @@ function drawGrid(cellPx, originX, originY) {
   ctx.stroke();
 }
 
-// Draw the per-step decision overlay for placement event `e` at progress f∈[0,1].
-function drawNarration(e, f, cellPx, originX, originY) {
+// Draw the active decision: the cursor walking the spiral through every cell it
+// evaluates (✕ on enemy conflicts, outline on occupied) up to its current eval,
+// then the landing — a cursor ring resolving into a color drop. Eval progress is
+// driven by `evalPos` during the intro, by `acc` after, or shown in full (paused).
+function drawNarration(e, cellPx, originX, originY) {
+  if (e.t !== 'p' || !e.scan) return;
   const rect = (x, y) => ({ l: originX + (x - 0.5) * cellPx, t: originY - (y + 0.5) * cellPx, s: cellPx });
-  if (e.t !== 'p' || !e.skipped) return;
-  const pulse = 0.5 + 0.5 * Math.sin(f * Math.PI); // brighten then settle
+  const scanLen = e.scan.length;
+  let ep;
+  if (paused || introActive()) ep = evalPos;             // manual/intro: held eval cursor
+  else ep = Math.min(scanLen + 1, acc * (scanLen + 1));
+  const walked = Math.max(0, Math.min(scanLen, Math.floor(ep)));
 
-  // Cells the cursor skipped on the way here, with the reason.
-  for (const s of e.skipped) {
+  // Cells already evaluated and rejected this turn.
+  for (let i = 0; i < walked; i++) {
+    const s = e.scan[i];
     const r = rect(s.x, s.y);
     if (s.kind === 'threat') {
       const c = s.by >= 0 ? palCols[s.by] : [230, 90, 90];
-      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.22 * pulse})`;
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},0.16)`;
       ctx.fillRect(r.l, r.t, r.s, r.s);
-      ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.85 * pulse})`;
-      ctx.lineWidth = Math.max(1, cellPx * 0.06);
-      ctx.strokeRect(r.l + 1, r.t + 1, r.s - 2, r.s - 2);
-      drawCross(r, `rgba(255,255,255,${0.55 * pulse})`, cellPx);
+      drawCross(r, 'rgba(255,255,255,0.55)', cellPx);
     } else {
-      ctx.strokeStyle = 'rgba(170,170,180,0.45)';
+      ctx.strokeStyle = 'rgba(170,170,180,0.4)';
       ctx.lineWidth = 1;
       ctx.strokeRect(r.l + 1, r.t + 1, r.s - 2, r.s - 2);
     }
   }
 
-  // Attack squares this piece will stamp (fade in past the midpoint).
-  if (f > 0.35) {
-    const c = palCols[e.k] || [200, 200, 200];
-    const a = Math.min(1, (f - 0.35) / 0.4);
-    for (const [tx, ty] of e.threats) {
-      const r = rect(tx, ty);
-      ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.5 * a})`;
-      ctx.lineWidth = Math.max(1, cellPx * 0.05);
-      ctx.strokeRect(r.l + 1.5, r.t + 1.5, r.s - 3, r.s - 3);
-    }
-  }
-
-  // The chosen cell: a cursor ring early, dropping into a color fill.
-  const r = rect(e.x, e.y);
-  if (f < 0.5) {
-    ctx.strokeStyle = `rgba(255,255,255,${0.85})`;
+  if (ep < scanLen) {
+    // Cursor is currently testing scan[walked]. If it's enemy-blocked, show WHICH
+    // enemy knight(s) attack it (line + glow); the cursor ring rides on top.
+    const s = e.scan[walked];
+    if (s.kind === 'threat') drawAttackHighlight(s.x, s.y, e.k, cellPx, originX, originY);
+    // The piece's own move boxes from the cursor — on every empty cell it tests.
+    // Occupied cells are skipped before the attack rule is even considered, so none.
+    if (s.kind !== 'occ') drawMoveBoxes(s.x, s.y, e.k, cellPx, originX, originY);
+    const r = rect(s.x, s.y);
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
     ctx.lineWidth = Math.max(1.5, cellPx * 0.08);
     ctx.strokeRect(r.l + 2, r.t + 2, r.s - 4, r.s - 4);
+    drawCaption(e, s.x, s.y, s.kind === 'occ' ? 'occupied' : 'testing');
   } else {
-    const g = (f - 0.5) / 0.5;
-    const inset = (1 - g) * r.s * 0.4;
-    ctx.fillStyle = colorStr(e.k);
-    ctx.fillRect(r.l + inset, r.t + inset, r.s - 2 * inset, r.s - 2 * inset);
-    ctx.strokeStyle = `rgba(255,255,255,${0.6 * (1 - g)})`;
-    ctx.lineWidth = Math.max(1, cellPx * 0.05);
-    ctx.strokeRect(r.l + inset, r.t + inset, r.s - 2 * inset, r.s - 2 * inset);
+    // Landed: show the piece's move boxes from its cell, then drop the color.
+    const g = paused ? 1 : Math.min(1, ep - scanLen);
+    drawMoveBoxes(e.x, e.y, e.k, cellPx, originX, originY);
+    const r = rect(e.x, e.y);
+    if (paused) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+      ctx.lineWidth = Math.max(1.5, cellPx * 0.09);
+      ctx.strokeRect(r.l + 2, r.t + 2, r.s - 4, r.s - 4);
+    } else {
+      const inset = (1 - g) * r.s * 0.4;
+      ctx.fillStyle = colorStr(e.k);
+      ctx.fillRect(r.l + inset, r.t + inset, r.s - 2 * inset, r.s - 2 * inset);
+    }
+    drawCaption(e, e.x, e.y, paused ? 'next' : 'placed');
   }
+}
 
-  drawCaption(e, f);
+// The enemy piece(s) currently attacking cell (cx,cy) — i.e. why color k can't
+// take it. A piece of color j≠k at P attacks (cx,cy) iff P = (cx,cy)+off for some
+// of j's leaper offsets (offsets are symmetric under negation). Capped at 4.
+function attackersOf(cx, cy, k) {
+  const out = [];
+  if (!occGrid || !sim.colorOffs) return out;
+  const S = sim.S, W = sim.W;
+  const seen = new Set();
+  for (let j = 0; j < sim.K; j++) {
+    if (j === k) continue;
+    const offs = sim.colorOffs[j];
+    for (let o = 0; o < offs.length; o++) {
+      const px = cx + offs[o][0], py = cy + offs[o][1];
+      if (px < -S || px > S || py < -S || py > S) continue;
+      if (occGrid[(py + S) * W + (px + S)] === j + 1) {
+        const key = px + ',' + py;
+        if (!seen.has(key)) { seen.add(key); out.push({ x: px, y: py, j }); }
+        if (out.length >= 4) return out;
+      }
+    }
+  }
+  return out;
+}
+
+// Draw the block: a line from each attacking knight to the cell it rules out,
+// plus a glow ring on the attacker square, in the attacker's color.
+function drawAttackHighlight(cx, cy, k, cellPx, originX, originY) {
+  const atks = attackersOf(cx, cy, k);
+  if (!atks.length) return;
+  const ccx = originX + cx * cellPx, ccy = originY - cy * cellPx;
+  for (const a of atks) {                       // lines first (under the glow)
+    const c = palCols[a.j] || [230, 90, 90];
+    ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},0.85)`;
+    ctx.lineWidth = Math.max(1.5, cellPx * 0.06);
+    ctx.beginPath();
+    ctx.moveTo(originX + a.x * cellPx, originY - a.y * cellPx);
+    ctx.lineTo(ccx, ccy);
+    ctx.stroke();
+  }
+  for (const a of atks) {                        // glow ring on each attacker
+    const c = palCols[a.j] || [230, 90, 90];
+    const ax = originX + a.x * cellPx, ay = originY - a.y * cellPx;
+    ctx.save();
+    ctx.shadowColor = `rgba(${c[0]},${c[1]},${c[2]},0.95)`;
+    ctx.shadowBlur = cellPx * 0.5;
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    ctx.lineWidth = Math.max(1.5, cellPx * 0.08);
+    ctx.strokeRect(ax - cellPx / 2 + 2, ay - cellPx / 2 + 2, cellPx - 4, cellPx - 4);
+    ctx.restore();
+  }
+}
+
+// Persistent per-color markers: a pin on each color's most-recent placement, so
+// you can track where every cursor has crawled to as the field fills.
+function drawCursorMarkers(cellPx, originX, originY) {
+  if (!cursors) return;
+  const rad = Math.max(2.5, Math.min(cellPx * 0.24, 9));
+  for (let k = 0; k < cursors.length; k++) {
+    const cur = cursors[k];
+    if (!cur) continue;
+    const x = originX + cur.x * cellPx, y = originY - cur.y * cellPx;
+    const c = palCols[k] || [200, 200, 200];
+    ctx.beginPath();
+    ctx.arc(x, y, rad, 0, Math.PI * 2);
+    ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, rad * 0.35);
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.stroke();
+  }
+}
+
+// Lingering ✕ marks for cells skipped due to enemy conflict — they fade over
+// XMARK_FADE and vanish if the cell later fills. Drawn behind the live overlay.
+function drawXMarks(cellPx, originX, originY) {
+  if (cellPx < 7 || !xMarks.length) return;
+  for (const m of xMarks) {
+    const a = 1 - (animClock - m.t) / XMARK_FADE;
+    if (a <= 0) continue;
+    const l = originX + (m.x - 0.5) * cellPx, t = originY - (m.y + 0.5) * cellPx, s = cellPx;
+    if (cellPx >= 14) {
+      const c = m.by >= 0 ? palCols[m.by] : [230, 90, 90];
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.12 * a})`;
+      ctx.fillRect(l, t, s, s);
+      drawCross({ l, t, s }, `rgba(255,255,255,${0.4 * a})`, cellPx);
+    } else {
+      ctx.fillStyle = `rgba(255,255,255,${0.4 * a})`;
+      ctx.fillRect(l + s * 0.5 - 1, t + s * 0.5 - 1, 2, 2);
+    }
+  }
+}
+
+// A one-time sonar ring on each placed cell: springs out from the cell center,
+// fades, and is done. Ages on uiClock so it animates even while paused/stepping.
+function drawPings(cellPx, originX, originY) {
+  for (const p of pings) {
+    const prog = (uiClock - p.t) / PING_DUR;
+    if (prog < 0 || prog >= 1) continue;
+    const ease = 1 - (1 - prog) * (1 - prog); // fast spring-out, easing to rest
+    const cx = originX + p.x * cellPx, cy = originY - p.y * cellPx;
+    const rad = cellPx * (0.3 + ease * 2.7);
+    ctx.strokeStyle = `rgba(255,255,255,${0.75 * (1 - prog)})`;
+    ctx.lineWidth = Math.max(1, cellPx * 0.08);
+    ctx.beginPath();
+    ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// The piece's own attack squares projected from (cx,cy) — its knight's-move boxes
+// in the active color. Deduped for compound pieces; clipped to the grid.
+function drawMoveBoxes(cx, cy, k, cellPx, originX, originY) {
+  const offs = sim.colorOffs ? sim.colorOffs[k] : null;
+  if (!offs) return;
+  const c = palCols[k] || [200, 200, 200];
+  const S = sim.S;
+  ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},0.6)`;
+  ctx.lineWidth = Math.max(1, cellPx * 0.05);
+  const seen = new Set();
+  for (let o = 0; o < offs.length; o++) {
+    const tx = cx + offs[o][0], ty = cy + offs[o][1];
+    if (tx < -S || tx > S || ty < -S || ty > S) continue;
+    const key = tx + ',' + ty;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const l = originX + (tx - 0.5) * cellPx, t = originY - (ty + 0.5) * cellPx;
+    ctx.strokeRect(l + 1.5, t + 1.5, cellPx - 3, cellPx - 3);
+  }
 }
 
 function drawCross(r, style, cellPx) {
@@ -505,10 +719,9 @@ function drawCross(r, style, cellPx) {
   ctx.stroke();
 }
 
-function drawCaption(e, f) {
+function drawCaption(e, x, y, verb) {
   const lbl = colorLabel[e.k] || 'piece';
-  const verb = f < 0.5 ? 'testing' : 'placed';
-  const txt = `${lbl}  ·  ${verb} (${e.x}, ${e.y})`;
+  const txt = `${lbl}  ·  ${verb} (${x}, ${y})`;
   ctx.font = '13px ui-monospace, "SF Mono", Menlo, Consolas, monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
@@ -624,7 +837,7 @@ const PANEL_HTML = `
       <h2>actions</h2>
       <div class="legend">
         <button class="kbd" data-action="pause">Space</button><div class="kbd-desc">pause: <span id="v-paused" style="color:#9cf">off</span></div>
-        <button class="kbd" data-action="step" data-dir="1">→</button><div class="kbd-desc">step a placement (paused)</div>
+        <button class="kbd" data-action="step" data-dir="1">→</button><div class="kbd-desc">step one square (paused)</div>
         <button class="kbd" data-action="restart">R</button><div class="kbd-desc">restart</div>
         <button class="kbd" data-action="cycle">L</button><div class="kbd-desc">cycle presets: <span id="v-cycle" style="color:#9cf">off</span></div>
         <button class="kbd" data-action="copy">C</button><div class="kbd-desc" id="copy-desc">copy screensaver URL</div>
@@ -869,17 +1082,31 @@ function toggleCycle() {
 }
 function togglePause() {
   paused = !paused;
+  if (paused) evalPos = currentEp(); // freeze the eval cursor where the live crawl was
   window.flashToast?.(paused ? 'paused' : 'resumed');
   updateDom();
 }
-// Single-step a placement while paused (dir -1 back, +1 forward).
+// Single-step ONE evaluation while paused (dir -1 back, +1 forward) — the same
+// per-candidate frames the live crawl shows (attacker line/glow and all), advanced
+// by hand. Crossing a placement's end commits it; crossing its start un-commits.
 function step(dir) {
   if (!paused) { togglePause(); }
   const total = sim.events.length;
-  if (dir > 0 && head < total) { commit(sim.events[head++]); }
-  else if (dir < 0 && head > 0) { head--; repaintField(head); }
+  pings = [];
+  evalPos += dir;
+  while (head < total && evalPos >= evalLen(sim.events[head])) {
+    evalPos -= evalLen(sim.events[head]);
+    commitNarrated(sim.events[head++]);
+  }
+  while (evalPos < 0 && head > 0) {
+    head--;
+    repaintField(head);              // rebuild field + occGrid + cursors up to head
+    evalPos += evalLen(sim.events[head]);
+  }
+  if (evalPos < 0) evalPos = 0;
+  xMarks = [];                        // stepped view is just this decision, not the lingering trail
   clock = timeForPlayed(head); acc = 0;
-  half = Math.max(half, maxR * MARGIN + 0.5);
+  half = Math.max(H0, Math.min(sim.S, maxR * MARGIN + 0.5)); // zoom both ways to track the frontier
   runState = 'run'; fade = 1;
 }
 function restart() { startFrac = 0; startRun(); }
@@ -958,7 +1185,7 @@ let last = performance.now();
 let ticking = true;
 function tick(now) {
   if (document.hidden) { ticking = false; return; }
-  const dt = Math.min((now - last) / 1000, 0.05);
+  const dt = Math.max(0, Math.min((now - last) / 1000, 0.05)); // never run time backward
   last = now;
   resize();
   update(dt);

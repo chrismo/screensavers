@@ -16,7 +16,11 @@ This page **narrates** that decision and then lets it run:
    a candidate. Cells it skips flash with the reason: a white **✕** over a cell
    attacked by an enemy color, a plain outline over an already-occupied cell. On
    a legal cell it drops in its color and outlines the squares it now threatens.
-   A caption names the piece and what it's doing.
+   A caption names the piece and what it's doing. While the cursor sits on an
+   enemy-blocked cell, a **line + glow** points to the enemy knight(s) attacking
+   it (in their color), so you can see exactly *why* it's skipped. A persistent
+   **pin** marks where each color last left off, so all the cursors stay trackable
+   as the field fills.
 2. **Interleave** (fast, zooming out) — as the run accelerates and cells get too
    small to read, the overlay drops and the K cursors just fill the field,
    building the same emergent pattern the main sketch reveals.
