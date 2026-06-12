@@ -60,8 +60,8 @@ each group's actual colors.
   (`24 · 100 · 200 · … · 1000`); the panel arrows / `[` `]` move between rungs and
   a URL value snaps to the nearest. Small (the `24` default) keeps the solve
   readable; bigger plays longer before it fills.
-- `speed=6` — overall tempo as a **level** `0`–`8` (shown in the panel as the
-  level number; default `6`). Higher = faster; it scales both the narrated crawl
+- `speed=3` — overall tempo as a **level** `0`–`8` (shown in the panel as the
+  level number; default `3`). Higher = faster; it scales both the narrated crawl
   and the rate the ramp accelerates from. The levels are a geometric ladder
   (`1/16 · 1/8 · 1/4 · 1/2 · 1 · 2 · 4 · 8` placements/sec) — the slow rungs are
   very leisurely. (The per-cell drop is always a quick pop, independent of level.)

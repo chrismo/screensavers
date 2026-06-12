@@ -138,7 +138,7 @@ function leaperOffsets(piece) {
 }
 
 // Bump the MINOR on each change so the panel shows when a new build has loaded.
-const VERSION = '1.16';
+const VERSION = '1.18';
 
 // =======================================================================
 // Live params (URL-overridable, panel-tunable)
@@ -148,8 +148,8 @@ let extent = 24;         // S: max spiral shell ≈ half the grid side (a rung o
 // actual placements/sec rate via a geometric ladder. Level 0 = static; 1..8 index
 // SPEED_RATES. The fractional slow rates never surface in the panel or the URL.
 const SPEED_RATES = [1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8]; // placements/sec at t=0, per level
-let speedLevel = 6;      // 0 = static; default 6 → 2/s (the ramp accelerates from here)
-let lastSpeedLevel = 6;  // remembered animated level, so the static toggle can restore it
+let speedLevel = 3;      // 0 = static; default 3 → 1/4 per sec (the ramp accelerates from here)
+let lastSpeedLevel = 3;  // remembered animated level, so the static toggle can restore it
 let speed = SPEED_RATES[speedLevel - 1]; // derived rate the pacing math uses; 0 when static
 let paletteIdx = 0;
 let startFrac = 0;       // initial timeline fraction 0..1 (URL `start`)
@@ -310,6 +310,7 @@ let uiClock = 0;         // always advances — drives the paused-marker pulse
 let stepDirty = false;   // a backward step happened; coalesce the (O(head)) rebuild to one/frame
 let landHead = -1;       // which event the drop-pop timer is for (so the pop is per-placement)
 let landT = 0;           // uiClock when the current placement's drop pop began
+let introT = 0;          // real seconds spent in the eval-paced intro (anchors the ramp handoff)
 function introActive() { return head < EVAL_EVENTS; }       // slow eval-by-eval opening
 function evalLen(i) { const d = sim.detail[i]; return (d && d.scan) ? d.scan.length + 1 : 1; }
 
@@ -469,7 +470,7 @@ function rebuild(resetRun = true) {
 function startRun() {
   head = 0; clock = 0; acc = 0; maxR = 0; half = H0;
   runState = 'run'; stateT = 0; fade = 1; paused = false;
-  evalPos = 0; xMarks = []; pings = []; animClock = 0; stepDirty = false; landHead = -1;
+  evalPos = 0; xMarks = []; pings = []; animClock = 0; stepDirty = false; landHead = -1; introT = 0;
   if (occGrid) occGrid.fill(0);
   if (threatGrid) threatGrid.fill(0);
   cursors = new Array(sim.K).fill(null);
@@ -512,12 +513,20 @@ function update(dt) {
       // Slow opening: walk the cursor through every evaluation, one at a time.
       // Scale with speed (anchored so speed=2 → EVAL_PER_SEC) so the speed knob
       // visibly governs the narrated intro, not just the post-intro ramp.
+      introT += dt;
       evalPos += EVAL_PER_SEC * (speed / 2) * dt;
       let guard = 0;
       while (head < total && evalPos >= evalLen(head)) {
         evalPos -= evalLen(head);
         commitNarrated(head); head++;
-        if (!introActive()) { clock = timeForPlayed(head); evalPos = 0; break; }
+        if (!introActive()) {
+          // Hand off to the ramp CONTINUOUSLY: start it at the intro's actual
+          // average rate (head/introT) rather than fast-forwarding the clock up
+          // the curve (which jumped to ~2+speed and felt like a sudden lurch).
+          const rIntro = head / Math.max(introT, 0.001);
+          clock = TAU * Math.log(Math.max(rIntro, speed) / speed);
+          evalPos = 0; break;
+        }
         if (++guard > 4000) break;
       }
     } else {

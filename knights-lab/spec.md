@@ -90,7 +90,27 @@ drifting. (V2's `solveSteps` is the instrumented superset of V1's `simulate`.)
   (v1.16: panel shows the bare level number, not a gauge.) v1.16 also decoupled
   the per-cell **drop pop** from speed — it's a constant ~0.12 s real-time pop, so
   slow levels give a leisurely *crawl* to watch while each cell still fills
-  quickly (the dwell on a placed cell is slow, the fill is not).
+  quickly (the dwell on a placed cell is slow, the fill is not). v1.17 fixed a
+  jarring speed *lurch* at the intro→ramp handoff (placement #12): the old code
+  set `clock = timeForPlayed(head)`, fast-forwarding up the `e^(t/TAU)` curve so
+  the ramp began at `EVAL_EVENTS/TAU + speed` (≈2+speed) — a ~9× jump at slow
+  levels. Now the ramp is anchored to the intro's *measured* average rate
+  (`head/introT`, clamped to ≥ speed), so the two phases meet continuously.
+
+**Deferred (revisit on request)**
+- **Acceleration toggle — yes, but only for small extents.** When the user asks
+  "why don't we have an acceleration toggle?", the answer is: *we can — as long as
+  we limit it to small contexts.* The toggle would turn the exponential ramp off
+  (`rateAt(t) = accel ? speed·e^(t/TAU) : speed`) so the run plays at a constant
+  chosen level start-to-finish — great for watching the *whole* build at one
+  steady rhythm (a study mode), cheap to add (panel toggle + key + `?accel=0`),
+  and it removes the ramp/handoff seam entirely. The hard catch: constant rate
+  doesn't compose with large extent — S=1000 ≈ 3.9M placements is ~135 h at 8/s
+  and effectively never at slow levels. So ship it as an explicit "steady pace, no
+  zoom-out payoff" mode that implies a small/medium extent; it loses V2's
+  signature narrate→interleave→zoom-out reveal, which is the whole point at scale.
+  (Discussed & deferred 2026-06; user likes the slow-watching direction so will
+  likely want this.)
 
 **Still open**
 1. **Details default:** always-on-with-auto-hide (current behavior) vs a visible
