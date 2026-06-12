@@ -138,7 +138,7 @@ function leaperOffsets(piece) {
 }
 
 // Bump the MINOR on each change so the panel shows when a new build has loaded.
-const VERSION = '1.10';
+const VERSION = '1.12';
 
 // =======================================================================
 // Live params (URL-overridable, panel-tunable)
@@ -211,7 +211,17 @@ function solveSteps(S) {
   const cx = new Int32Array(K), cy = new Int32Array(K);
   const done = new Array(K).fill(false);
   let remaining = K;
-  const events = [];
+
+  // The construction sequence lives in flat typed arrays (one entry per event) so
+  // it scales to large extents; rich per-step detail (scan/threats) is kept only
+  // for the first DETAIL_CAP events — the narrated opening — as objects.
+  const cap = W * W + K; // placements ≤ cells, plus one "exhausted" event per color
+  const seqT = new Uint8Array(cap);  // 0 = placement, 1 = exhausted turn
+  const seqK = new Uint8Array(cap);  // color
+  const seqX = new Int16Array(cap);  // cell (placements only)
+  const seqY = new Int16Array(cap);
+  const detail = [];                 // {scan,threats} for events < DETAIL_CAP; sparse after
+  let N = 0;
 
   const t0 = performance.now();
   while (remaining > 0) {
@@ -219,14 +229,14 @@ function solveSteps(S) {
       if (done[k]) continue;
       let x = cx[k], y = cy[k];
       const notK = (~(1 << k)) & 0xff;
-      const detail = events.length < DETAIL_CAP;
-      const scan = detail ? [] : null; // every cell the cursor evaluated and rejected
+      const wantDetail = N < DETAIL_CAP;
+      const scan = wantDetail ? [] : null; // every cell the cursor evaluated and rejected
       let off = false;
       while (true) {
         if (x > S || x < -S || y > S || y < -S) { done[k] = true; remaining--; off = true; break; }
         const id = idx(x, y);
         if (occ[id] === 0 && (threat[id] & notK) === 0) break;
-        if (detail && scan.length < SCAN_CAP) {
+        if (wantDetail && scan.length < SCAN_CAP) {
           if (occ[id] !== 0) scan.push({ x, y, kind: 'occ', by: occ[id] - 1 });
           else {
             let by = -1;
@@ -238,22 +248,24 @@ function solveSteps(S) {
         x = nxt[0]; y = nxt[1];
       }
       cx[k] = x; cy[k] = y;
-      if (off) { events.push({ t: 'x', k }); continue; }
+      if (off) { seqT[N] = 1; seqK[N] = k; if (wantDetail) detail[N] = null; N++; continue; }
 
       const id = idx(x, y);
       occ[id] = k + 1;
       const bit = 1 << k;
       const offs = colorOffs[k];
-      const threats = detail ? [] : null;
+      const threats = wantDetail ? [] : null;
       for (let o = 0; o < offs.length; o++) {
         const tx = x + offs[o][0], ty = y + offs[o][1];
-        if (inGrid(tx, ty)) { threat[idx(tx, ty)] |= bit; if (detail) threats.push([tx, ty]); }
+        if (inGrid(tx, ty)) { threat[idx(tx, ty)] |= bit; if (wantDetail) threats.push([tx, ty]); }
       }
-      events.push(detail ? { t: 'p', k, x, y, scan, threats } : { t: 'p', k, x, y });
+      seqT[N] = 0; seqK[N] = k; seqX[N] = x; seqY[N] = y;
+      if (wantDetail) detail[N] = { scan, threats };
+      N++;
     }
   }
   lastSimMs = performance.now() - t0;
-  return { events, K, S, W, colorOffs }; // colorOffs lets the renderer resolve attackers
+  return { N, K, S, W, colorOffs, seqT, seqK, seqX, seqY, detail };
 }
 
 // =======================================================================
@@ -262,7 +274,7 @@ function solveSteps(S) {
 const canvas = document.getElementById('lab');
 const ctx = canvas.getContext('2d');
 
-let sim = null;          // { events, K, S, W }
+let sim = null;          // { N, K, S, W, colorOffs, seqT/seqK/seqX/seqY (typed), detail[] }
 let palCols = [];        // [r,g,b] per color
 let colorLabel = [];     // per-color piece label (group expanded)
 let field = null;        // offscreen canvas, 1px per cell (the committed field)
@@ -287,15 +299,29 @@ let xMarks = [];         // lingering conflict ✕ marks: { x, y, by, t }
 let pings = [];          // sonar rings on just-placed cells: { x, y, t }
 let animClock = 0;       // advances only while running — ages xMarks/pings
 let uiClock = 0;         // always advances — drives the paused-marker pulse
+let stepDirty = false;   // a backward step happened; coalesce the (O(head)) rebuild to one/frame
 
 function introActive() { return head < EVAL_EVENTS; }       // slow eval-by-eval opening
-function evalLen(e) { return (e && e.t === 'p' && e.scan) ? e.scan.length + 1 : 1; }
+function evalLen(i) { const d = sim.detail[i]; return (d && d.scan) ? d.scan.length + 1 : 1; }
+
+// Materialize a lightweight event object for index i (only ever one or two live at
+// once — the bulk sequence stays in flat typed arrays). null if out of range.
+function eventAt(i) {
+  if (i < 0 || i >= sim.N) return null;
+  const d = sim.detail[i];
+  return {
+    t: sim.seqT[i] === 1 ? 'x' : 'p',
+    k: sim.seqK[i], x: sim.seqX[i], y: sim.seqY[i],
+    scan: d ? d.scan : null,
+    threats: d ? d.threats : null,
+  };
+}
 
 // The eval position drawNarration is currently showing — used to snap evalPos on
 // pause so manual stepping picks up exactly where the live crawl was.
 function currentEp() {
-  const e = sim.events[head];
-  const scanLen = (e && e.scan) ? e.scan.length : 0;
+  const d = sim.detail[head];
+  const scanLen = (d && d.scan) ? d.scan.length : 0;
   if (introActive()) return Math.max(0, Math.min(scanLen + 1, evalPos));
   return Math.min(scanLen + 1, acc * (scanLen + 1));
 }
@@ -307,11 +333,6 @@ function bgStr() { const b = curPalette().bg; return `rgb(${b[0]},${b[1]},${b[2]
 function playedBy(t) { return speed * TAU * (Math.exp(t / TAU) - 1); }
 function timeForPlayed(p) { return TAU * Math.log(Math.max(0, p) / (speed * TAU) + 1); }
 function rateAt(t) { return speed * Math.exp(t / TAU); }
-
-function paintCell(e) {
-  fieldCtx.fillStyle = colorStr(e.k);
-  fieldCtx.fillRect(e.x + sim.S, sim.S - e.y, 1, 1); // row = S - y → +y points up
-}
 
 // Stamp the cells a color-k piece at (x,y) attacks (by ITS shape) into the threat
 // bitmask — exactly how the solver builds it; this IS the danger map's data.
@@ -325,33 +346,39 @@ function stampThreat(k, x, y) {
   }
 }
 
-function commit(e) {
-  if (e.t !== 'p') return;
-  paintCell(e);
-  if (occGrid) occGrid[(e.y + sim.S) * sim.W + (e.x + sim.S)] = e.k + 1;
-  stampThreat(e.k, e.x, e.y);
-  cursors[e.k] = { x: e.x, y: e.y };
-  const r = Math.max(Math.abs(e.x), Math.abs(e.y));
+// Commit event i straight from the typed-array sequence: paint the cell, update
+// the occ/threat grids, the color's cursor, and the frontier radius.
+function commitAt(i) {
+  if (sim.seqT[i] !== 0) return;               // exhausted turn — nothing placed
+  const k = sim.seqK[i], x = sim.seqX[i], y = sim.seqY[i];
+  fieldCtx.fillStyle = colorStr(k);
+  fieldCtx.fillRect(x + sim.S, sim.S - y, 1, 1); // row = S - y → +y points up
+  occGrid[(y + sim.S) * sim.W + (x + sim.S)] = k + 1;
+  stampThreat(k, x, y);
+  cursors[k] = { x, y };
+  const r = Math.max(Math.abs(x), Math.abs(y));
   if (r > maxR) maxR = r;
 }
 
-// Commit + the narration side-effects: a sonar ping on the placed cell, and the
+// commitAt + narration side-effects: a sonar ping on the placed cell, and the
 // turn's conflict cells stamped as lingering ✕ marks (cleared if later filled).
-function commitNarrated(e) {
-  commit(e);
-  if (e.t !== 'p') return;
-  pings.push({ x: e.x, y: e.y, t: uiClock }); // uiClock advances even while paused
+function commitNarrated(i) {
+  commitAt(i);
+  if (sim.seqT[i] !== 0) return;
+  const x = sim.seqX[i], y = sim.seqY[i];
+  pings.push({ x, y, t: uiClock }); // uiClock advances even while paused
   if (pings.length > 8) pings.shift();
-  for (let i = xMarks.length - 1; i >= 0; i--) {
-    if (xMarks[i].x === e.x && xMarks[i].y === e.y) xMarks.splice(i, 1); // this cell is filled now
+  for (let j = xMarks.length - 1; j >= 0; j--) {
+    if (xMarks[j].x === x && xMarks[j].y === y) xMarks.splice(j, 1); // this cell is filled now
   }
-  if (e.scan) {
-    for (const s of e.scan) if (s.kind === 'threat') xMarks.push({ x: s.x, y: s.y, by: s.by, t: animClock });
+  const d = sim.detail[i];
+  if (d && d.scan) {
+    for (const s of d.scan) if (s.kind === 'threat') xMarks.push({ x: s.x, y: s.y, by: s.by, t: animClock });
     while (xMarks.length > 220) xMarks.shift();
   }
 }
 
-// Replay events [0, n) into a fresh field (used on palette change / step-back /
+// Replay events [0, n) into a fresh field + grids (palette change / step-back /
 // ?start=). Recomputes maxR.
 function repaintField(n) {
   fieldCtx.clearRect(0, 0, field.width, field.height);
@@ -359,17 +386,7 @@ function repaintField(n) {
   if (threatGrid) threatGrid.fill(0);
   cursors = new Array(sim.K).fill(null);
   maxR = 0;
-  for (let i = 0; i < n; i++) {
-    const e = sim.events[i];
-    if (e.t !== 'p') continue;
-    fieldCtx.fillStyle = colorStr(e.k);
-    fieldCtx.fillRect(e.x + sim.S, sim.S - e.y, 1, 1);
-    if (occGrid) occGrid[(e.y + sim.S) * sim.W + (e.x + sim.S)] = e.k + 1;
-    stampThreat(e.k, e.x, e.y);
-    cursors[e.k] = { x: e.x, y: e.y };
-    const r = Math.max(Math.abs(e.x), Math.abs(e.y));
-    if (r > maxR) maxR = r;
-  }
+  for (let i = 0; i < n; i++) commitAt(i);
 }
 
 function resize() {
@@ -389,7 +406,7 @@ function viewMin() { return Math.min(cssW, cssH); }
 function cellPxFor(h) { return viewMin() / (2 * h + 1); }
 
 function rebuild(resetRun = true) {
-  const S = Math.max(12, Math.min(extent, 600));
+  const S = Math.max(12, Math.min(extent, 1024));
   if (S !== extent) extent = S;
   normalizeGroups();
   sim = solveSteps(S);
@@ -403,7 +420,7 @@ function rebuild(resetRun = true) {
   occGrid = new Int8Array(sim.W * sim.W);
   threatGrid = new Uint8Array(sim.W * sim.W);
   cursors = new Array(sim.K).fill(null);
-  console.log(`[knights-lab] ${labelText()} — S=${sim.S}, ${sim.K} colors, ${sim.events.length} events in ${lastSimMs.toFixed(1)}ms`);
+  console.log(`[knights-lab] ${labelText()} — S=${sim.S}, ${sim.K} colors, ${sim.N} events in ${lastSimMs.toFixed(1)}ms`);
   if (resetRun) startRun();
   updateDom();
   updateConfigLabel();
@@ -414,13 +431,13 @@ function rebuild(resetRun = true) {
 function startRun() {
   head = 0; clock = 0; acc = 0; maxR = 0; half = H0;
   runState = 'run'; stateT = 0; fade = 1; paused = false;
-  evalPos = 0; xMarks = []; pings = []; animClock = 0;
+  evalPos = 0; xMarks = []; pings = []; animClock = 0; stepDirty = false;
   if (occGrid) occGrid.fill(0);
   if (threatGrid) threatGrid.fill(0);
   cursors = new Array(sim.K).fill(null);
   if (fieldCtx) fieldCtx.clearRect(0, 0, field.width, field.height); // wipe the old render
-  if (startFrac > 0 && sim.events.length) {
-    head = Math.min(sim.events.length, Math.floor(startFrac * sim.events.length));
+  if (startFrac > 0 && sim.N) {
+    head = Math.min(sim.N, Math.floor(startFrac * sim.N));
     repaintField(head);
     clock = timeForPlayed(head);
     half = Math.max(H0, maxR * MARGIN + 0.5);
@@ -431,17 +448,25 @@ function startRun() {
 // Per-frame update + draw
 // =======================================================================
 function update(dt) {
-  const total = sim.events.length;
+  const total = sim.N;
   uiClock += dt;
+  // A backward step (or a burst of them, held) only marks state dirty; do the one
+  // O(head) rebuild here, at most once per frame, then snap the zoom to the
+  // (now-correct) frontier. Coalescing keeps held-left bounded at large extents.
+  if (stepDirty) {
+    repaintField(head);
+    stepDirty = false;
+    half = Math.max(H0, Math.min(sim.S, maxR * MARGIN + 0.5));
+  }
   if (runState === 'run' && !paused) {
     animClock += dt;
     if (introActive()) {
       // Slow opening: walk the cursor through every evaluation, one at a time.
       evalPos += EVAL_PER_SEC * dt;
       let guard = 0;
-      while (head < total && evalPos >= evalLen(sim.events[head])) {
-        evalPos -= evalLen(sim.events[head]);
-        commitNarrated(sim.events[head++]);
+      while (head < total && evalPos >= evalLen(head)) {
+        evalPos -= evalLen(head);
+        commitNarrated(head); head++;
         if (!introActive()) { clock = timeForPlayed(head); evalPos = 0; break; }
         if (++guard > 4000) break;
       }
@@ -452,7 +477,7 @@ function update(dt) {
       if (n > 0) {
         acc -= n;
         n = Math.min(n, total - head);
-        for (let i = 0; i < n; i++) commitNarrated(sim.events[head++]);
+        for (let i = 0; i < n; i++) { commitNarrated(head); head++; }
       }
     }
     // Age out lingering ✕ marks (frozen while paused so they can be studied).
@@ -499,9 +524,9 @@ function draw() {
   ctx.drawImage(field, dx, dy, dw, dw);
 
   // Narrating this frame? (gates both the danger map and the step overlay)
-  const narrate = runState === 'run' && cellPx >= NARRATE_PX && head < sim.events.length &&
+  const narrate = runState === 'run' && cellPx >= NARRATE_PX && head < sim.N &&
     (paused || introActive() || rateAt(clock) <= NARRATE_RATE_MAX);
-  const activeK = sim.events[head] ? sim.events[head].k : 0;
+  const activeK = head < sim.N ? sim.seqK[head] : 0;
 
   // Danger map: where the active mover can't go (enemy fire), in attacker colors.
   if (narrate) drawDangerMap(cellPx, originX, originY, activeK);
@@ -513,7 +538,7 @@ function draw() {
   drawCursorMarkers(cellPx, originX, originY);
 
   // The active decision overlay: move boxes (my reach), attacker lines, cursor.
-  if (narrate) drawNarration(sim.events[head], cellPx, originX, originY);
+  if (narrate) drawNarration(eventAt(head), cellPx, originX, originY);
 
   // One-time sonar ring on each just-placed cell (springs out, fades, gone).
   drawPings(cellPx, originX, originY);
@@ -1089,7 +1114,7 @@ function updateDom() {
 
 // --- param adjustment ---------------------------------------------------
 function adjustParam(param, dir) {
-  if (param === 'extent') { extent = Math.max(24, Math.min(220, extent + dir * stepExtent)); rebuild(); }
+  if (param === 'extent') { extent = Math.max(24, Math.min(1024, extent + dir * stepExtent)); rebuild(); }
   else if (param === 'speed') { speed = Math.max(1, Math.min(30, speed + dir * stepSpeed)); updateDom(); }
   else if (param === 'palette') {
     paletteIdx = (paletteIdx + dir + PALETTES.length) % PALETTES.length;
@@ -1140,22 +1165,22 @@ function togglePause() {
 // by hand. Crossing a placement's end commits it; crossing its start un-commits.
 function step(dir) {
   if (!paused) { togglePause(); }
-  const total = sim.events.length;
+  const total = sim.N;
   pings = [];
   evalPos += dir;
-  while (head < total && evalPos >= evalLen(sim.events[head])) {
-    evalPos -= evalLen(sim.events[head]);
-    commitNarrated(sim.events[head++]);
+  while (head < total && evalPos >= evalLen(head)) {
+    evalPos -= evalLen(head);
+    commitNarrated(head); head++;
   }
-  while (evalPos < 0 && head > 0) {
+  while (evalPos < 0 && head > 0) {   // cheap: just walk head back; rebuild is deferred
     head--;
-    repaintField(head);              // rebuild field + occGrid + cursors up to head
-    evalPos += evalLen(sim.events[head]);
+    evalPos += evalLen(head);
   }
   if (evalPos < 0) evalPos = 0;
+  if (dir < 0) stepDirty = true;      // field/grids/maxR rebuilt once in update()
   xMarks = [];                        // stepped view is just this decision, not the lingering trail
   clock = timeForPlayed(head); acc = 0;
-  half = Math.max(H0, Math.min(sim.S, maxR * MARGIN + 0.5)); // zoom both ways to track the frontier
+  half = Math.max(H0, Math.min(sim.S, maxR * MARGIN + 0.5)); // forward: maxR correct; backward: re-snapped post-rebuild
   runState = 'run'; fade = 1;
 }
 function restart() { startFrac = 0; startRun(); }
@@ -1172,7 +1197,7 @@ function applyUrlParams() {
     }
     if (parsed.length) groups = parsed;
   }
-  if (q.has('extent')) extent = Math.max(24, Math.min(220, parseInt(q.get('extent'), 10) || extent));
+  if (q.has('extent')) extent = Math.max(24, Math.min(1024, parseInt(q.get('extent'), 10) || extent));
   if (q.has('speed')) { const s = parseInt(q.get('speed'), 10); if (!Number.isNaN(s)) speed = Math.max(1, Math.min(30, s)); }
   if (q.has('palette')) paletteIdx = (parseInt(q.get('palette'), 10) || 0) % PALETTES.length;
   if (q.has('start')) startFrac = Math.max(0, Math.min(1, parseFloat(q.get('start')) || 0));
