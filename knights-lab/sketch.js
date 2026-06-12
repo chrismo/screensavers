@@ -138,13 +138,19 @@ function leaperOffsets(piece) {
 }
 
 // Bump the MINOR on each change so the panel shows when a new build has loaded.
-const VERSION = '1.12';
+const VERSION = '1.16';
 
 // =======================================================================
 // Live params (URL-overridable, panel-tunable)
 // =======================================================================
-let extent = 60;         // S: max spiral shell ≈ half the grid side (small = readable)
-let speed = 2;           // base placements/sec at t=0 (the ramp accelerates from here)
+let extent = 24;         // S: max spiral shell ≈ half the grid side (a rung on EXTENT_STEPS)
+// Speed is a discrete LEVEL (what the panel gauge and the URL store), mapped to an
+// actual placements/sec rate via a geometric ladder. Level 0 = static; 1..8 index
+// SPEED_RATES. The fractional slow rates never surface in the panel or the URL.
+const SPEED_RATES = [1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8]; // placements/sec at t=0, per level
+let speedLevel = 6;      // 0 = static; default 6 → 2/s (the ramp accelerates from here)
+let lastSpeedLevel = 6;  // remembered animated level, so the static toggle can restore it
+let speed = SPEED_RATES[speedLevel - 1]; // derived rate the pacing math uses; 0 when static
 let paletteIdx = 0;
 let startFrac = 0;       // initial timeline fraction 0..1 (URL `start`)
 let cyclePresets = false;
@@ -156,7 +162,7 @@ const NARRATE_RATE_MAX = 10; // placements/sec above which narration is too fast
 const DETAIL_CAP = 300;      // record scan/threat detail for only the first N events
 const SCAN_CAP = 600;        // max recorded evaluations per turn (detail events)
 const EVAL_EVENTS = 12;      // first N placements play eval-by-eval (slow intro)
-const EVAL_PER_SEC = 14;     // cursor evaluations per second during the intro
+const EVAL_PER_SEC = 14;     // intro cursor evals/sec AT speed=2 (scales with speed so the knob is the overall tempo)
 const XMARK_FADE = 2.6;      // seconds a conflict ✕ lingers after the cursor passes it
 const PING_DUR = 0.7;        // sonar ping lifetime (s)
 const H0 = 5;                // min half-window (cells) — opening zoom shows ~11 cells
@@ -165,8 +171,10 @@ const HALF_EASE = 2.2;       // half-window easing toward target (per second)
 const HOLD_SEC = 4;
 const FADE_SEC = 1.2;
 
-const stepExtent = 20;
-const stepSpeed = 1;
+// Extent is a discrete ladder: a small readable default, then round hundreds to
+// 1000. The panel arrows / [ ] step between rungs; the URL snaps to the nearest.
+const EXTENT_STEPS = [24, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+const LANDING_DUR = 0.12;    // seconds for the cell-drop pop — constant, NOT tied to speed
 
 const presets = [
   { name: 'Knights ×3',   groups: [{ pieces: ['knight'], count: 3 }], paletteIdx: 0 },
@@ -182,7 +190,7 @@ let presetIdx = 0;
 
 const helpText = {
   extent: 'How far the spiral is computed (max shell). Small keeps the solve readable; bigger plays longer before it fills.',
-  speed: 'Opening placements per second. The rate accelerates from here, so this mostly sets how leisurely the narrated intro is.',
+  speed: 'Overall tempo, level 1 (slowest) → 8 (fastest): scales the narrated crawl and the rate the ramp accelerates from. The slow levels are very leisurely; 0 = static (hold on the finished pattern). The per-cell drop is always a quick pop regardless of level.',
   palette: 'Color scheme. Colors evenly span the hue wheel for however many colors the groups add up to.',
 };
 
@@ -290,7 +298,7 @@ let clock = 0;           // seconds elapsed in the current run
 let acc = 0;             // fractional placement accumulator
 let half = H0;           // current half-window (cells), eased
 let maxR = 0;            // frontier radius (max Chebyshev of placed cells)
-let runState = 'run';    // run → hold → fadeout → fadein → run
+let runState = 'run';    // run → hold → fadeout → fadein → run (or 'static': frozen finished pattern)
 let stateT = 0;
 let fade = 1;
 let paused = false;
@@ -300,7 +308,8 @@ let pings = [];          // sonar rings on just-placed cells: { x, y, t }
 let animClock = 0;       // advances only while running — ages xMarks/pings
 let uiClock = 0;         // always advances — drives the paused-marker pulse
 let stepDirty = false;   // a backward step happened; coalesce the (O(head)) rebuild to one/frame
-
+let landHead = -1;       // which event the drop-pop timer is for (so the pop is per-placement)
+let landT = 0;           // uiClock when the current placement's drop pop began
 function introActive() { return head < EVAL_EVENTS; }       // slow eval-by-eval opening
 function evalLen(i) { const d = sim.detail[i]; return (d && d.scan) ? d.scan.length + 1 : 1; }
 
@@ -333,6 +342,35 @@ function bgStr() { const b = curPalette().bg; return `rgb(${b[0]},${b[1]},${b[2]
 function playedBy(t) { return speed * TAU * (Math.exp(t / TAU) - 1); }
 function timeForPlayed(p) { return TAU * Math.log(Math.max(0, p) / (speed * TAU) + 1); }
 function rateAt(t) { return speed * Math.exp(t / TAU); }
+
+// speed 0 = static: jump to the finished pattern and hold (no ramp math is ever
+// run in this mode, so the divide-by-zero in timeForPlayed is never reached).
+function isStatic() { return speed === 0; }
+
+// Set the speed level (0 = static, 1..N index SPEED_RATES) and derive the rate the
+// pacing math reads. Remembers the last animated level for the static toggle.
+function setSpeedLevel(L) {
+  speedLevel = Math.max(0, Math.min(SPEED_RATES.length, L | 0));
+  speed = speedLevel === 0 ? 0 : SPEED_RATES[speedLevel - 1];
+  if (speedLevel > 0) lastSpeedLevel = speedLevel;
+}
+// What the panel shows for speed — the bare level number (0 → static).
+function speedLabel() { return speedLevel === 0 ? 'static' : String(speedLevel); }
+
+// Extent ladder helpers: nearest rung to the current/given value.
+function extentIndex() {
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < EXTENT_STEPS.length; i++) {
+    const d = Math.abs(EXTENT_STEPS[i] - extent);
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+function snapExtent(v) {
+  let best = EXTENT_STEPS[0], bd = Infinity;
+  for (const s of EXTENT_STEPS) { const d = Math.abs(s - v); if (d < bd) { bd = d; best = s; } }
+  return best;
+}
 
 // Stamp the cells a color-k piece at (x,y) attacks (by ITS shape) into the threat
 // bitmask — exactly how the solver builds it; this IS the danger map's data.
@@ -406,7 +444,7 @@ function viewMin() { return Math.min(cssW, cssH); }
 function cellPxFor(h) { return viewMin() / (2 * h + 1); }
 
 function rebuild(resetRun = true) {
-  const S = Math.max(12, Math.min(extent, 1024));
+  const S = Math.max(24, Math.min(extent, 1000));
   if (S !== extent) extent = S;
   normalizeGroups();
   sim = solveSteps(S);
@@ -431,11 +469,20 @@ function rebuild(resetRun = true) {
 function startRun() {
   head = 0; clock = 0; acc = 0; maxR = 0; half = H0;
   runState = 'run'; stateT = 0; fade = 1; paused = false;
-  evalPos = 0; xMarks = []; pings = []; animClock = 0; stepDirty = false;
+  evalPos = 0; xMarks = []; pings = []; animClock = 0; stepDirty = false; landHead = -1;
   if (occGrid) occGrid.fill(0);
   if (threatGrid) threatGrid.fill(0);
   cursors = new Array(sim.K).fill(null);
   if (fieldCtx) fieldCtx.clearRect(0, 0, field.width, field.height); // wipe the old render
+  if (isStatic()) {
+    // Static mode: commit the whole field, snap the zoom to the full frontier, and
+    // hold — no narration, no ramp, no fade/restart cycle.
+    head = sim.N;
+    repaintField(head);
+    runState = 'static';
+    half = Math.max(H0, Math.min(sim.S, maxR * MARGIN + 0.5));
+    return;
+  }
   if (startFrac > 0 && sim.N) {
     head = Math.min(sim.N, Math.floor(startFrac * sim.N));
     repaintField(head);
@@ -458,11 +505,14 @@ function update(dt) {
     stepDirty = false;
     half = Math.max(H0, Math.min(sim.S, maxR * MARGIN + 0.5));
   }
+  if (runState === 'static') return; // frozen finished pattern — nothing to advance
   if (runState === 'run' && !paused) {
     animClock += dt;
     if (introActive()) {
       // Slow opening: walk the cursor through every evaluation, one at a time.
-      evalPos += EVAL_PER_SEC * dt;
+      // Scale with speed (anchored so speed=2 → EVAL_PER_SEC) so the speed knob
+      // visibly governs the narrated intro, not just the post-intro ramp.
+      evalPos += EVAL_PER_SEC * (speed / 2) * dt;
       let guard = 0;
       while (head < total && evalPos >= evalLen(head)) {
         evalPos -= evalLen(head);
@@ -534,8 +584,9 @@ function draw() {
   // Lingering conflict ✕ marks (fade over time; cleared when a cell fills).
   drawXMarks(cellPx, originX, originY);
 
-  // Persistent per-color markers: where each color last left off.
-  drawCursorMarkers(cellPx, originX, originY);
+  // Persistent per-color markers: where each color last left off (hidden in the
+  // static finished view, which is meant to read as a clean wallpaper).
+  if (runState !== 'static') drawCursorMarkers(cellPx, originX, originY);
 
   // The active decision overlay: move boxes (my reach), attacker lines, cursor.
   if (narrate) drawNarration(eventAt(head), cellPx, originX, originY);
@@ -636,8 +687,9 @@ function drawNarration(e, cellPx, originX, originY) {
     ctx.strokeRect(r.l + 2, r.t + 2, r.s - 4, r.s - 4);
     drawCaption(e, s.x, s.y, s.kind === 'occ' ? 'occupied' : 'testing');
   } else {
-    // Landed: show the piece's move boxes from its cell, then drop the color.
-    const g = paused ? 1 : Math.min(1, ep - scanLen);
+    // Landed: show the piece's move boxes from its cell, then drop the color. The
+    // drop is a constant-duration pop on real time (NOT tied to speed): at slow
+    // tempos the cursor still lingers here, but the fill itself stays quick.
     drawMoveBoxes(e.x, e.y, e.k, cellPx, originX, originY);
     const r = rect(e.x, e.y);
     if (paused) {
@@ -645,6 +697,8 @@ function drawNarration(e, cellPx, originX, originY) {
       ctx.lineWidth = Math.max(1.5, cellPx * 0.09);
       ctx.strokeRect(r.l + 2, r.t + 2, r.s - 4, r.s - 4);
     } else {
+      if (landHead !== head) { landHead = head; landT = uiClock; } // pop starts on entry
+      const g = Math.min(1, (uiClock - landT) / LANDING_DUR);
       const inset = (1 - g) * r.s * 0.4;
       ctx.fillStyle = colorStr(e.k);
       ctx.fillRect(r.l + inset, r.t + inset, r.s - 2 * inset, r.s - 2 * inset);
@@ -913,6 +967,7 @@ const PANEL_HTML = `
         <button class="kbd" data-action="pause">Space</button><div class="kbd-desc">pause: <span id="v-paused" style="color:#9cf">off</span></div>
         <button class="kbd" data-action="step" data-dir="1">→</button><div class="kbd-desc">step one square (paused)</div>
         <button class="kbd" data-action="restart">R</button><div class="kbd-desc">restart</div>
+        <button class="kbd" data-action="static">S</button><div class="kbd-desc">static: <span id="v-static" style="color:#9cf">off</span></div>
         <button class="kbd" data-action="cycle">L</button><div class="kbd-desc">cycle presets: <span id="v-cycle" style="color:#9cf">off</span></div>
         <button class="kbd" data-action="copy">C</button><div class="kbd-desc" id="copy-desc">copy screensaver URL</div>
         <button class="kbd" data-action="fullscreen">F</button><div class="kbd-desc">fullscreen</div>
@@ -1047,6 +1102,7 @@ function buildPanel() {
   dom.presetPills = document.getElementById('v-preset-pills');
   dom.cycle = document.getElementById('v-cycle');
   dom.paused = document.getElementById('v-paused');
+  dom.static = document.getElementById('v-static');
 
   window.SS.presetPills(dom.presetPills, presets.length, pickPreset);
 
@@ -1061,6 +1117,7 @@ function buildPanel() {
     if (a === 'restart') restart();
     else if (a === 'pause') togglePause();
     else if (a === 'step') step(Number(el.dataset.dir));
+    else if (a === 'static') toggleStatic();
     else if (a === 'cycle') toggleCycle();
     else if (a === 'copy') copyShareUrl();
     else if (a === 'fullscreen') window.toggleFullscreen?.();
@@ -1102,11 +1159,12 @@ const toggleDrawer = window.SS.toggleDrawer;
 function updateDom() {
   if (!panelReady) return;
   dom.extent.textContent = String(extent);
-  dom.speed.textContent = `${speed}/s`;
+  dom.speed.textContent = speedLabel();
   dom.palette.textContent = curPalette().name;
   dom.preset.textContent = presets[presetIdx] ? presets[presetIdx].name : '—';
   if (dom.cycle) dom.cycle.textContent = cyclePresets ? 'on' : 'off';
   if (dom.paused) dom.paused.textContent = paused ? 'on' : 'off';
+  if (dom.static) dom.static.textContent = isStatic() ? 'on' : 'off';
   for (let i = 0; i < dom.presetPills.children.length; i++) {
     dom.presetPills.children[i].classList.toggle('active', i === presetIdx);
   }
@@ -1114,8 +1172,17 @@ function updateDom() {
 
 // --- param adjustment ---------------------------------------------------
 function adjustParam(param, dir) {
-  if (param === 'extent') { extent = Math.max(24, Math.min(1024, extent + dir * stepExtent)); rebuild(); }
-  else if (param === 'speed') { speed = Math.max(1, Math.min(30, speed + dir * stepSpeed)); updateDom(); }
+  if (param === 'extent') {
+    const i = Math.max(0, Math.min(EXTENT_STEPS.length - 1, extentIndex() + dir));
+    extent = EXTENT_STEPS[i];
+    rebuild();
+  }
+  else if (param === 'speed') {
+    const wasStatic = speedLevel === 0;
+    setSpeedLevel(speedLevel + dir);
+    if ((speedLevel === 0) !== wasStatic) { startFrac = 0; startRun(); } // crossed into/out of static
+    updateDom();
+  }
   else if (param === 'palette') {
     paletteIdx = (paletteIdx + dir + PALETTES.length) % PALETTES.length;
     palCols = genColors(curPalette(), Math.max(1, sim.K));
@@ -1160,6 +1227,15 @@ function togglePause() {
   window.flashToast?.(paused ? 'paused' : 'resumed');
   updateDom();
 }
+// Static (finished pattern, held) ↔ animated. Off → on jumps to the finished
+// field; on → off restarts a fresh narrated run at the remembered speed.
+function toggleStatic() {
+  setSpeedLevel(isStatic() ? lastSpeedLevel : 0);
+  startFrac = 0;
+  startRun();
+  window.flashToast?.(isStatic() ? 'static — finished pattern' : 'animated');
+  updateDom();
+}
 // Single-step ONE evaluation while paused (dir -1 back, +1 forward) — the same
 // per-candidate frames the live crawl shows (attacker line/glow and all), advanced
 // by hand. Crossing a placement's end commits it; crossing its start un-commits.
@@ -1178,7 +1254,7 @@ function step(dir) {
   }
   if (evalPos < 0) evalPos = 0;
   if (dir < 0) stepDirty = true;      // field/grids/maxR rebuilt once in update()
-  xMarks = [];                        // stepped view is just this decision, not the lingering trail
+  xMarks = []; landHead = -1;         // stepped view is just this decision, not the lingering trail
   clock = timeForPlayed(head); acc = 0;
   half = Math.max(H0, Math.min(sim.S, maxR * MARGIN + 0.5)); // forward: maxR correct; backward: re-snapped post-rebuild
   runState = 'run'; fade = 1;
@@ -1197,8 +1273,9 @@ function applyUrlParams() {
     }
     if (parsed.length) groups = parsed;
   }
-  if (q.has('extent')) extent = Math.max(24, Math.min(1024, parseInt(q.get('extent'), 10) || extent));
-  if (q.has('speed')) { const s = parseInt(q.get('speed'), 10); if (!Number.isNaN(s)) speed = Math.max(1, Math.min(30, s)); }
+  if (q.has('extent')) { const v = parseInt(q.get('extent'), 10); if (!Number.isNaN(v)) extent = snapExtent(v); }
+  if (q.has('speed')) { const L = parseInt(q.get('speed'), 10); if (!Number.isNaN(L)) setSpeedLevel(L); }
+  if (q.get('static') === '1') setSpeedLevel(0);
   if (q.has('palette')) paletteIdx = (parseInt(q.get('palette'), 10) || 0) % PALETTES.length;
   if (q.has('start')) startFrac = Math.max(0, Math.min(1, parseFloat(q.get('start')) || 0));
   if (q.get('cycle') === '1') cyclePresets = true;
@@ -1209,7 +1286,7 @@ function copyShareUrl() {
   const q = new URLSearchParams();
   q.set('groups', groups.map((g) => `${g.pieces.join('-')}:${g.count}`).join(','));
   q.set('extent', String(extent));
-  q.set('speed', String(speed));
+  q.set('speed', String(speedLevel));
   q.set('palette', String(paletteIdx));
   if (cyclePresets) q.set('cycle', '1');
   q.set('nopanel', '1');
@@ -1231,6 +1308,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === ']') adjustParam('extent', 1);
   else if (e.key === 'k' || e.key === 'K') adjustParam('palette', 1);
   else if (e.key === ' ' || e.key === 'p' || e.key === 'P') togglePause();
+  else if (e.key === 's' || e.key === 'S') toggleStatic();
   else if (e.key === 'l' || e.key === 'L') toggleCycle();
   else if (e.key === 'r' || e.key === 'R') restart();
   else if (e.key === 'c' || e.key === 'C') copyShareUrl();

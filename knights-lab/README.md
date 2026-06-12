@@ -34,9 +34,10 @@ scales to any extent; the narration overlay is drawn on top only while zoomed in
 | Key | Action |
 | --- | --- |
 | `Space` / `P` | pause / resume |
-| `←` `→` | when paused: step one placement back / forward; when running: slower / faster |
+| `←` `→` | when paused: step one placement back / forward; when running: slower / faster (at speed 0 → **static**) |
 | `[` `]` | shrink / grow the computed extent (re-solves) |
 | `K` | cycle palette |
+| `S` | toggle **static** mode — jump to the finished pattern and hold (a clean wallpaper, no animation/overlay); toggle off to restart the build |
 | `L` | toggle preset cycling (rotate presets between runs) |
 | `R` | restart the run |
 | `C` | copy a `?nopanel=1` screensaver URL of the current state |
@@ -55,9 +56,17 @@ each group's actual colors.
   `-` (a compound leaper), count after `:`, groups separated by `,`. (`-` not
   `+`: in a query string `+` decodes to a space.) Roster: `knight`, `wazir`,
   `ferz`, `dabbaba`, `alfil`, `threeleaper`, `zebra`, `antelope`.
-- `extent=60` — spiral half-extent S (grid is (2S+1)²). Small keeps the solve
+- `extent=24` — spiral half-extent S (grid is (2S+1)²). Steps on a ladder
+  (`24 · 100 · 200 · … · 1000`); the panel arrows / `[` `]` move between rungs and
+  a URL value snaps to the nearest. Small (the `24` default) keeps the solve
   readable; bigger plays longer before it fills.
-- `speed=3` — opening placements per second (the rate accelerates from here).
+- `speed=6` — overall tempo as a **level** `0`–`8` (shown in the panel as the
+  level number; default `6`). Higher = faster; it scales both the narrated crawl
+  and the rate the ramp accelerates from. The levels are a geometric ladder
+  (`1/16 · 1/8 · 1/4 · 1/2 · 1 · 2 · 4 · 8` placements/sec) — the slow rungs are
+  very leisurely. (The per-cell drop is always a quick pop, independent of level.)
+  `speed=0` (or `static=1`) is **static** mode: skip the build, hold on the
+  finished pattern (handy as a wallpaper or for inspecting a combo).
 - `palette=0` — 0 Vivid · 1 Neon · 2 Pastel · 3 Mono.
 - `start=0.5` — start the timeline at this fraction (pre-fills that much, handy
   for inspecting the zoomed-out end state).

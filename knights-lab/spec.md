@@ -16,13 +16,13 @@ design decisions.
 
 | # | Gap | V1 (knights/) | V2 (knights-lab/) today | Action / notes |
 |---|-----|---------------|--------------------------|----------------|
-| 1 | **Large extent** | default `512`, up to `MAX_S` (~½ of GL max texture, thousands) | **DONE (v1.11):** default `60`, cap raised to `1024` (panel/URL/engine) | Reworked: detail objects kept only for the narrated opening; full sequence in flat typed arrays (`seqT`/`seqK` Uint8, `seqX`/`seqY` Int16) + sparse `detail[]`; bulk walks the arrays via `commitAt`. Verified: S=1024 = 3.9M events built in **273 ms** (~25 MB), no stall. Default unchanged (10.6k events, ~6 ms). Headroom to ~2048 if wanted. |
+| 1 | **Large extent** | default `512`, up to `MAX_S` (~½ of GL max texture, thousands) | **DONE (v1.11):** typed-array sequence unlocks large S. Default later set to `24` and cap to `1000` (v1.16). | Reworked: detail objects kept only for the narrated opening; full sequence in flat typed arrays (`seqT`/`seqK` Uint8, `seqX`/`seqY` Int16) + sparse `detail[]`; bulk walks the arrays via `commitAt`. Verified: S=1024 = 3.9M events built in **273 ms** (~25 MB), no stall. Headroom to ~2048 if wanted. |
 | 2 | **Reveal modes / sweep** | `spiral` (point sweeps the numbering spiral with a glowing head), `square` (whole rings), `all` (finished, just zoomed). Gated on each cell's spiral number in the shader. | only construction-order fill (cells appear in the order the solver places them) | **Resolved (see Decisions): NOT a parity requirement.** V2's per-cursor construction-order reveal is canonical — it shows the dynamics V1's uniform sweep averages away. Glow-sweep is an optional mode at most, low priority / maybe never. |
-| 3 | **Static "hold" mode** | `zoom=0` → hold on the finished image (inspect a combo, no animation) | always animates the build; no static-final mode | Add an equivalent (e.g. `speed=0` or a `mode=all`) that jumps to the finished field and holds. |
-| 4 | **Zoom-timing model** | `zoomSec` = seconds for one full zoom-out (default 90); `← →` adjust | `speed` = opening placements/sec (default 2), exponential ramp | Different mental models. Decide which V2 ships (or support both). `zoomSec`-style "total duration" may be friendlier for screensaver setup. |
+| 3 | **Static "hold" mode** | `zoom=0` → hold on the finished image (inspect a combo, no animation) | **DONE (v1.13):** `speed=0` (the "0" of the chosen timing model) jumps to the finished field and holds — no narration/ramp/fade cycle. Reached via the panel speed-arrow floor, the `S` key, or `?speed=0`/`?static=1`. Overlays (cursor pins etc.) are suppressed so it reads as a clean wallpaper. | Done. |
+| 4 | **Zoom-timing model** | `zoomSec` = seconds for one full zoom-out (default 90); `← →` adjust | `speed` = opening placements/sec (default 2), exponential ramp | **RESOLVED (see Decisions): keep `speed`.** It directly sets V2's narration-first identity (the narrated intro pace); `zoomSec`/total-duration was rejected as a worse fit. Static mode is the `speed=0` case. |
 | 5 | **`M` reveal key** | `M` cycles reveal mode | n/a | Drop — n/a unless the glow-sweep is ever added as an optional mode (#2). |
 | 6 | **Preset list** | …`Antelope×3`, `Ferz+Dab×6`… | swapped to `Ferz+Dab×4`, `Wazir×2` (dropped `Antelope×3`) | Reconcile to one canonical preset set for v2. |
-| 7 | **extent step size** | `stepExtent = 64` | `stepExtent = 20` | Re-tune once large extents are supported (probably want coarse steps again). |
+| 7 | **extent step size** | `stepExtent = 64` | **DONE (v1.16):** discrete ladder `EXTENT_STEPS = [24, 100, 200 … 1000]` (default `24`); panel/`[ ]` step rungs, URL snaps to nearest | Replaced the fixed step with named rungs. No alignment needed (Canvas2D; V1's 64 was just convenience, not a WebGL/texture requirement). |
 
 ## V2-only additions — preserve through the merge
 
@@ -74,9 +74,26 @@ drifting. (V2's `solveSteps` is the instrumented superset of V1's `simulate`.)
   neither of which we want now. The real scale limiter is the `events[]` rework
   (gap #1), not the renderer.
 
+**Resolved (cont.)**
+- **Timing model = `speed` (ramp), keep it.** `speed` (opening placements/sec,
+  exponential ramp) stays V2's primary pacing knob — it directly sets the
+  narrated-intro pace, which is V2's whole identity. V1's `zoomSec` (total
+  run duration) was rejected: duration-first makes the intro pace emergent
+  rather than set, a poor fit for a narration-first sketch. **Static mode is the
+  `speed=0` case** (mirrors V1's `zoom=0`): jump to the finished pattern and hold.
+  (v1.13.) v1.14: `speed` now also scales the narrated intro crawl (was a fixed
+  `EVAL_PER_SEC`, so the knob looked dead while you watched the opening) — it's
+  now the overall tempo, not just the post-intro ramp multiplier. v1.15: `speed`
+  became a discrete **level** 0–8 on a geometric ladder (`1/16…8` placements/sec),
+  shown in the panel and stored in the URL as the integer level — so the slow
+  end reaches 1/16/s without ever surfacing a fraction in the panel or the URL.
+  (v1.16: panel shows the bare level number, not a gauge.) v1.16 also decoupled
+  the per-cell **drop pop** from speed — it's a constant ~0.12 s real-time pop, so
+  slow levels give a leisurely *crawl* to watch while each cell still fills
+  quickly (the dwell on a placed cell is slow, the fill is not).
+
 **Still open**
-1. **Zoom/timing model:** `speed` (ramp) vs `zoomSec` (total duration) vs both.
-2. **Details default:** always-on-with-auto-hide (current behavior) vs a visible
+1. **Details default:** always-on-with-auto-hide (current behavior) vs a visible
    toggle; what `?details=` / key.
 3. **Symmetric (invertible) stepping — deferred, not blocked.** Forward stepping
    (`commitAt`) is incremental (cost ∝ distance stepped); backward stepping is
@@ -102,7 +119,8 @@ drifting. (V2's `solveSteps` is the instrumented superset of V1's `simulate`.)
 
 1. ~~**Typed-array sequence rework** (#1) → unlock extent 1024.~~ **DONE (v1.11).**
    `?extent=1024` works; default stays 60. (`?details=0` still TODO.)
-2. **Static/finished mode** (#3) + settle the **timing model** (still-open #1).
+2. ~~**Static/finished mode** (#3) + settle the **timing model** (#4).~~ **DONE
+   (v1.13).** `speed=0` static; `speed` model kept. (`?details=0` still TODO.)
 3. **Reveal-mode decision** (#2/#5) — if bringing the sweep over, that's the big
    visual piece.
 4. **Preset reconcile** (#6), **extent step** (#7).
