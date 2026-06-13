@@ -41,6 +41,11 @@ These are the reason V2 exists; the "opening act" the original TODO wanted:
 - **Eval-granular pause / stepping** (`Space`, `←/→`) — the same per-candidate
   frames the live crawl shows, hand-advanced.
 - **`speed`** control and the **`VERSION`** tag in the panel.
+- **Spiral underlay** (v1.21, `G` / `?spiral=`): the spiral track every cursor
+  walks, drawn as the grid's own cell walls MINUS the wall the path crosses (so
+  the corridor reads as the gaps). Four views: `none` / `spiral` (default — track
+  only) / `grid` / `both`. Bounded to the (2S+1)² field; fades in only when zoomed
+  in. Not part of presets.
 - Canvas2D renderer with a 1px-per-cell offscreen field blitted once per frame.
 
 At large extent these auto-hide: the overlays only draw while zoomed in

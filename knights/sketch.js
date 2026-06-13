@@ -137,7 +137,7 @@ function leaperOffsets(piece) {
 }
 
 // Bump the MINOR on each change so the panel shows when a new build has loaded.
-const VERSION = '1.20';
+const VERSION = '1.21';
 
 // =======================================================================
 // Live params (URL-overridable, panel-tunable)
@@ -154,6 +154,7 @@ let paletteIdx = 0;
 let startFrac = 0;       // initial timeline fraction 0..1 (URL `start`)
 let cyclePresets = false;
 let details = true;      // narration overlays on? off = pure screensaver (field + grid only)
+let spiralStyle = 'spiral'; // grid/spiral view: 'none' | 'spiral' | 'grid' | 'both'
 
 // --- pacing / camera constants ------------------------------------------
 const TAU = 6.0;             // seconds; placement rate ≈ speed·e^(t/TAU) (bigger = gentler ramp)
@@ -574,8 +575,9 @@ function draw() {
 
   const cellPx = cellPxFor(half);
   const originX = cssW / 2, originY = cssH / 2;
-  // Faded grid first, so placed cells sit on top of it (graph-paper look).
+  // Faded grid + the spiral track first, so placed cells sit on top (graph-paper).
   drawGrid(cellPx, originX, originY);
+  drawSpiral(cellPx, originX, originY);
   // Blit the whole committed field in one call (transparent where empty → bg).
   const dw = sim.W * cellPx;
   const dx = originX - (sim.S + 0.5) * cellPx;
@@ -614,19 +616,87 @@ function draw() {
   }
 }
 
-// Faded graph-paper grid drawn behind the field, every frame. The alpha fades
-// out as cells shrink so it never becomes sub-pixel noise when zoomed out.
+// How "in" the spiral-maze is (0 zoomed out → 1 when cells are big enough to read
+// it). Drives the maze alpha AND the plain grid's fade-out, so the path's open
+// gaps aren't backfilled by a leftover grid line.
+function spiralFade(cellPx) { return Math.max(0, Math.min(1, (cellPx - 8) / 8)); }
+
+// Faded graph-paper grid drawn behind the field, every frame (in the 'grid' and
+// 'both' styles). The alpha fades out as cells shrink so it never becomes
+// sub-pixel noise when zoomed out.
 function drawGrid(cellPx, originX, originY) {
+  if (spiralStyle !== 'grid' && spiralStyle !== 'both') return;
   const a = 0.20 * Math.max(0, Math.min(1, (cellPx - 2) / 4));
   if (a <= 0.003) return;
   const S = sim.S;
   const visX = Math.min(S, Math.ceil(cssW / cellPx / 2) + 1);
   const visY = Math.min(S, Math.ceil(cssH / cellPx / 2) + 1);
+  // Bound the lines to the (2S+1)² field so they don't bleed past the extent edge
+  // (matches the spiral + the field blit); clamped to the viewport for culling.
+  const x0 = Math.max(0, originX - (S + 0.5) * cellPx), x1 = Math.min(cssW, originX + (S + 0.5) * cellPx);
+  const y0 = Math.max(0, originY - (S + 0.5) * cellPx), y1 = Math.min(cssH, originY + (S + 0.5) * cellPx);
   ctx.strokeStyle = `rgba(255,255,255,${a})`;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (let gx = -visX; gx <= visX + 1; gx++) { const sx = originX + (gx - 0.5) * cellPx; ctx.moveTo(sx, 0); ctx.lineTo(sx, cssH); }
-  for (let gy = -visY; gy <= visY + 1; gy++) { const sy = originY - (gy - 0.5) * cellPx; ctx.moveTo(0, sy); ctx.lineTo(cssW, sy); }
+  for (let gx = -visX; gx <= visX + 1; gx++) { const sx = originX + (gx - 0.5) * cellPx; ctx.moveTo(sx, y0); ctx.lineTo(sx, y1); }
+  for (let gy = -visY; gy <= visY + 1; gy++) { const sy = originY - (gy - 0.5) * cellPx; ctx.moveTo(x0, sy); ctx.lineTo(x1, sy); }
+  ctx.stroke();
+}
+
+// The spiral highlight (drawn in the 'spiral' and 'both' styles): the grid's own
+// cell walls MINUS the wall the path crosses into the next cell, so the spiral
+// corridor reads as the gaps. In 'spiral' the grid isn't drawn at all, so those
+// gaps are truly open; in 'both' the faint grid still shows under them. Centered
+// on the origin (camera never pans), so only the visible window is computed;
+// fades in when cells are big enough to read it and is gone once zoomed out.
+function drawSpiral(cellPx, originX, originY) {
+  if (spiralStyle !== 'spiral' && spiralStyle !== 'both') return;
+  const a = 0.40 * spiralFade(cellPx);
+  if (a <= 0.003) return;
+  drawSpiralMaze(cellPx, originX, originY, a);
+}
+
+// The square spiral as cell walls EXCEPT where the path threads through.
+function drawSpiralMaze(cellPx, originX, originY, a) {
+  const S = sim.S;
+  const visX = Math.min(S, Math.ceil(cssW / cellPx / 2) + 1);
+  const visY = Math.min(S, Math.ceil(cssH / cellPx / 2) + 1);
+  const visMax = Math.max(visX, visY);
+  const key = (cx, cy) => (cx + 2048) * 4096 + (cy + 2048);
+
+  // "Open" walls = the cell boundaries the spiral path steps across (no wall).
+  // openV(x,y) = right edge of cell (x,y); openH(x,y) = top edge of cell (x,y).
+  const openV = new Set(), openH = new Set();
+  let x = 0, y = 0;
+  const cap = (2 * visMax + 2) * (2 * visMax + 2) + 4; // safety bound on the trace
+  for (let i = 0; i < cap; i++) {
+    const n = spiralStep(x, y); const nx = n[0], ny = n[1];
+    if (nx > x) openV.add(key(x, y));
+    else if (nx < x) openV.add(key(nx, y));
+    else if (ny > y) openH.add(key(x, y));
+    else openH.add(key(x, ny));
+    x = nx; y = ny;
+    if (Math.max(Math.abs(x), Math.abs(y)) > visMax) break;
+  }
+
+  // Draw every cell wall in view that the path does NOT cross.
+  ctx.strokeStyle = `rgba(255,255,255,${a})`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let gy = -visY; gy <= visY; gy++) {
+    for (let gx = -visX; gx <= visX; gx++) {
+      if (!openV.has(key(gx, gy))) {            // right edge: vertical line at gx+0.5
+        const sx = originX + (gx + 0.5) * cellPx;
+        ctx.moveTo(sx, originY - (gy + 0.5) * cellPx);
+        ctx.lineTo(sx, originY - (gy - 0.5) * cellPx);
+      }
+      if (!openH.has(key(gx, gy))) {            // top edge: horizontal line at gy+0.5
+        const sy = originY - (gy + 0.5) * cellPx;
+        ctx.moveTo(originX + (gx - 0.5) * cellPx, sy);
+        ctx.lineTo(originX + (gx + 0.5) * cellPx, sy);
+      }
+    }
+  }
   ctx.stroke();
 }
 
@@ -981,6 +1051,7 @@ const PANEL_HTML = `
         <button class="kbd" data-action="restart">R</button><div class="kbd-desc">restart</div>
         <button class="kbd" data-action="static">S</button><div class="kbd-desc">static: <span id="v-static" style="color:#9cf">off</span></div>
         <button class="kbd" data-action="details">D</button><div class="kbd-desc">details: <span id="v-details" style="color:#9cf">on</span></div>
+        <button class="kbd" data-action="spiral">G</button><div class="kbd-desc">grid/spiral: <span id="v-spiral" style="color:#9cf">spiral</span></div>
         <button class="kbd" data-action="cycle">L</button><div class="kbd-desc">cycle presets: <span id="v-cycle" style="color:#9cf">off</span></div>
         <button class="kbd" data-action="copy">C</button><div class="kbd-desc" id="copy-desc">copy screensaver URL</div>
         <button class="kbd" data-action="fullscreen">F</button><div class="kbd-desc">fullscreen</div>
@@ -1117,6 +1188,7 @@ function buildPanel() {
   dom.paused = document.getElementById('v-paused');
   dom.static = document.getElementById('v-static');
   dom.details = document.getElementById('v-details');
+  dom.spiral = document.getElementById('v-spiral');
 
   window.SS.presetPills(dom.presetPills, presets.length, pickPreset);
 
@@ -1133,6 +1205,7 @@ function buildPanel() {
     else if (a === 'step') step(Number(el.dataset.dir));
     else if (a === 'static') toggleStatic();
     else if (a === 'details') toggleDetails();
+    else if (a === 'spiral') cycleSpiral();
     else if (a === 'cycle') toggleCycle();
     else if (a === 'copy') copyShareUrl();
     else if (a === 'fullscreen') window.toggleFullscreen?.();
@@ -1181,6 +1254,7 @@ function updateDom() {
   if (dom.paused) dom.paused.textContent = paused ? 'on' : 'off';
   if (dom.static) dom.static.textContent = isStatic() ? 'on' : 'off';
   if (dom.details) dom.details.textContent = details ? 'on' : 'off';
+  if (dom.spiral) dom.spiral.textContent = spiralStyle;
   for (let i = 0; i < dom.presetPills.children.length; i++) {
     dom.presetPills.children[i].classList.toggle('active', i === presetIdx);
   }
@@ -1250,6 +1324,13 @@ function toggleDetails() {
   window.flashToast?.(details ? 'details on' : 'details off');
   updateDom();
 }
+// Cycle the grid/spiral view: none → spiral-only → grid-only → grid + spiral.
+const SPIRAL_STYLES = ['none', 'spiral', 'grid', 'both'];
+function cycleSpiral() {
+  spiralStyle = SPIRAL_STYLES[(SPIRAL_STYLES.indexOf(spiralStyle) + 1) % SPIRAL_STYLES.length];
+  window.flashToast?.(`spiral: ${spiralStyle}`);
+  updateDom();
+}
 // Static (finished pattern, held) ↔ animated. Off → on jumps to the finished
 // field; on → off restarts a fresh narrated run at the remembered speed.
 function toggleStatic() {
@@ -1303,6 +1384,7 @@ function applyUrlParams() {
   if (q.has('start')) startFrac = Math.max(0, Math.min(1, parseFloat(q.get('start')) || 0));
   if (q.get('cycle') === '1') cyclePresets = true;
   if (q.get('details') === '0') details = false;
+  if (SPIRAL_STYLES.includes(q.get('spiral'))) spiralStyle = q.get('spiral');
   normalizeGroups();
 }
 
@@ -1314,6 +1396,7 @@ function copyShareUrl() {
   q.set('palette', String(paletteIdx));
   if (cyclePresets) q.set('cycle', '1');
   if (!details) q.set('details', '0');
+  if (spiralStyle !== 'spiral') q.set('spiral', spiralStyle);
   q.set('nopanel', '1');
   const url = `${location.origin}${location.pathname}?${q.toString()}`;
   const done = (msg) => { window.flashToast?.(msg); const d = document.getElementById('copy-desc'); if (d) { const t = d.textContent; d.textContent = msg; setTimeout(() => (d.textContent = t), 1200); } };
@@ -1335,6 +1418,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === ' ' || e.key === 'p' || e.key === 'P') togglePause();
   else if (e.key === 's' || e.key === 'S') toggleStatic();
   else if (e.key === 'd' || e.key === 'D') toggleDetails();
+  else if (e.key === 'g' || e.key === 'G') cycleSpiral();
   else if (e.key === 'l' || e.key === 'L') toggleCycle();
   else if (e.key === 'r' || e.key === 'R') restart();
   else if (e.key === 'c' || e.key === 'C') copyShareUrl();

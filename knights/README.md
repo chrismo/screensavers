@@ -38,7 +38,8 @@ narration overlay is drawn on top only while zoomed in.
 | `[` `]` | shrink / grow the computed extent (re-solves) |
 | `K` | cycle palette |
 | `S` | toggle **static** mode — jump to the finished pattern and hold (a clean wallpaper, no animation/overlay); toggle off to restart the build |
-| `D` | toggle **details** — the narration overlay; off = a pure screensaver (just the building field + grid) |
+| `D` | toggle **details** — the narration overlay; off = a pure screensaver (just the building field + spiral) |
+| `G` | cycle the **grid/spiral** view: `none` → `spiral` (the spiral track only, default) → `grid` (plain grid) → `both` |
 | `L` | toggle preset cycling (rotate presets between runs) |
 | `R` | restart the run |
 | `C` | copy a `?nopanel=1` screensaver URL of the current state |
@@ -72,6 +73,9 @@ each group's actual colors.
 - `start=0.5` — start the timeline at this fraction (pre-fills that much, handy
   for inspecting the zoomed-out end state).
 - `details=0` — hide the narration overlay (pure-screensaver look).
+- `spiral=spiral` — the grid/spiral underlay: `none`, `spiral` (the spiral track
+  only — default), `grid` (plain grid bounded to the extent), or `both`. Only
+  shown while zoomed in; fades out as the field fills.
 - `cycle=1` — rotate to the next preset between runs.
 - `nopanel=1` — hide the panel (screensaver mode).
 
