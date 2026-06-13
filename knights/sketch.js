@@ -137,7 +137,7 @@ function leaperOffsets(piece) {
 }
 
 // Bump the MINOR on each change so the panel shows when a new build has loaded.
-const VERSION = '1.21';
+const VERSION = '1.22';
 
 // =======================================================================
 // Live params (URL-overridable, panel-tunable)
@@ -1006,6 +1006,8 @@ const PANEL_CSS = `
     padding: 0.28rem 0.42rem; border-radius: 3px; min-width: 1rem; text-align: center; }
   .preset-pills .pill.active { background: rgba(156,204,255,0.22); color: #9cf; }
   .legend { display: grid; grid-template-columns: auto 1fr; gap: 0.45rem 0.85rem; align-items: center; }
+  .about { margin-top: 1.1rem; padding-top: 0.9rem; border-top: 1px solid rgba(255,255,255,0.07); font-size: 11px; }
+  .about a { color: #9cf; text-decoration: none; } .about a:hover { color: #fff; }
   .kbd { font-family: inherit; background: rgba(255,255,255,0.07); padding: 0.35rem 0.6rem; border-radius: 3px;
     font-size: 12px; color: #ccc; text-align: center; white-space: nowrap; line-height: 1; }
   .kbd-desc { color: #aaa; font-size: 11px; }
@@ -1057,6 +1059,7 @@ const PANEL_HTML = `
         <button class="kbd" data-action="fullscreen">F</button><div class="kbd-desc">fullscreen</div>
         <button class="kbd" data-action="hide">H</button><div class="kbd-desc">hide / show panel</div>
       </div>
+      <div class="about"><a href="gallery.html" target="_blank">about &amp; gallery →</a></div>
     </div>
   </div>
 `;

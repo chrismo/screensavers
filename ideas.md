@@ -41,3 +41,73 @@ hotkey is a natural first one.
 
 (Noted 2026-06-12; not needed now — captured for if/when collecting presets
 becomes a thing.)
+
+## Pattern taxonomy / output fingerprinting
+
+Applies to any generative sketch whose output is a field/image worth
+characterizing (knights' colored spiral, petri-dish's trails, …). Idea: compute a
+small **fingerprint** of metrics from the rendered output so different "kinds" of
+patterns can be categorized — then auto-label, auto-curate, or sample for
+variety. Composes with **preset banks** above (auto-curated banks = one exemplar
+per cluster).
+
+Two complementary angles (worked example = knights):
+
+- **By output — measure the field.** knights' `occGrid` (color per cell) yields
+  cheap, discriminating metrics. The key: *no single metric works* — you need a
+  few, because e.g. checkerboard and chaos both have lots of edges but differ
+  wildly in periodicity. A usable set:
+  - **periodicity** (FFT-peak ratio / autocorrelation) — repeats vs not
+  - **region size** (mean contiguous same-color blob) — fragmented vs large
+  - **local entropy** (color diversity in NxN windows) — busy vs ordered
+  - **anisotropy** (directional autocorrelation) — diagonal bands vs radial
+    pinwheel vs isotropic chaos
+
+  Families seen so far separate on these: clean diagonal **bands** (pure knights),
+  **checkerboard** (wazir ×2), **pinwheel/radial** (wazir+ferz ×6), **quilt**
+  (ferz+dab ×8), **turbulent mosaic** (mixed-reach compounds, e.g. knight+antelope
+  ×2). Computable from data we already have; full FFT at S=1000 (≈4M cells) wants
+  downsampling, but region-size + windowed-entropy are cheap as-is.
+  - *Sub-feature — defects.* Large solid domains can carry tiny **defects**: lone
+    specks or little "bug" knots of empty + stolen cells. Two kinds seen so far —
+    **interior islands** (specks deep inside a solid field, seeded by a single
+    long-reach piece vetoing one cell) and **domain-wall** defects (blooms along
+    the empty-cell borders between domains). Only appear with long-reach compound
+    pieces in the roster. (Worked example: `knights/gallery.html`.)
+
+- **By input — predict from the roster** (cheaper, surprisingly strong). Often you
+  can call the family before solving:
+  - **# of distinct reaches** (Chebyshev radius per leaper): same reach → orderly;
+    *mixed* reaches → chaos (the knight-2 + antelope-4 discovery).
+  - **# colors (K)** — more interference.
+  - **colorboundness** — ferz/alfil/dabbaba only attack one parity sublattice, so
+    they can't reach the "other color" cells; this is *why* they make clean
+    quilt/checker textures. Knight/wazir aren't colorbound. Big driver.
+  - **OR vs AND compounding**, if that knob is ever added.
+
+**Payoffs:** auto-label the current pattern in the panel; **auto-curated preset
+banks** (one per cluster); a **"surprise me"** that samples diverse families;
+**interestingness filtering** (skip degenerate solid/checkerboard runs).
+
+(Noted 2026-06-12; explicitly a "someday, if in the mood" — the user likes
+playing/watching more than instrumenting. Captured so the taxonomy doesn't have
+to be re-derived.)
+
+## Image export — save the current frame as a PNG
+
+Applies to any canvas sketch. A key / panel button that grabs the current canvas
+and downloads it (`canvas.toBlob` → object URL → `<a download>` click), so you
+can keep a still of a pattern you like. Cheap, self-contained, and a natural home
+in shared `chrome.js` (next to fullscreen / copy-URL) so every sketch gets it.
+
+Options to consider:
+- **Resolution** — export at display size, or re-render at a higher resolution
+  (e.g. a big offscreen pass) for wallpaper-quality stills.
+- **Filename** — encode the state into it (the same params the share URL uses) so
+  a saved image is self-describing / reproducible.
+
+Dev counterpart already exists: [`tools/shot.mjs`](tools/shot.mjs) screenshots any
+sketch URL headlessly (used for verification) — the in-sketch download would be
+the user-facing version of the same capability.
+
+(Noted 2026-06-12.)

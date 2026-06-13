@@ -29,6 +29,10 @@ Renderer is **Canvas2D**: the committed field is blitted from a 1px-per-cell
 offscreen canvas in one draw call per frame, so it scales to large extents; the
 narration overlay is drawn on top only while zoomed in.
 
+See [gallery.html](gallery.html) for notable patterns (with preview images) — each
+with a live link and the exact [`../tools/shot.mjs`](../tools/shot.mjs) commands to
+render and zoom it.
+
 ## Controls
 
 | Key | Action |

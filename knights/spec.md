@@ -123,6 +123,10 @@ drifting. (V2's `solveSteps` is the instrumented superset of V1's `simulate`.)
   likely want this.)
 - **Preset banks / URL-carried presets** — a *cross-sketch* idea, so it lives in
   the repo-root [`../ideas.md`](../ideas.md), not here.
+- **Pattern taxonomy / output fingerprinting** — categorize the kinds of patterns
+  combos produce (banded / checker / pinwheel / quilt / turbulent) via a few
+  cheap field metrics + roster predictors (reach diversity, colorboundness).
+  Cross-sketch capability, parked in [`../ideas.md`](../ideas.md).
 
 **Still open**
 1. ~~**Details default:**~~ **DONE (v1.20):** narration overlay is on by default

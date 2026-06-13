@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Knights — gallery &amp; field notes</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; background: #111; color: #ddd;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+    body { max-width: 820px; margin: 0 auto; padding: 2rem 1.25rem 4rem; line-height: 1.6; }
+    a { color: #9cf; text-decoration: none; }
+    a:hover { color: #fff; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+    h1 small { color: #777; font-size: 0.8rem; font-weight: normal; }
+    h2 { font-size: 1.1rem; margin: 2.5rem 0 0.5rem; border-bottom: 1px solid #222; padding-bottom: 0.3rem; }
+    h3 { font-size: 1rem; margin: 2rem 0 0.4rem; }
+    p { margin: 0.6rem 0; }
+    .muted { color: #777; font-size: 12px; }
+    .nav { margin: 0.5rem 0 1.5rem; font-size: 12px; }
+    .nav a { color: #779; }
+    .nav a:hover { color: #9cf; }
+    figure { margin: 1rem 0; }
+    figure img { display: block; width: 100%; height: auto; border: 1px solid #222; border-radius: 3px; }
+    figcaption { color: #777; font-size: 11px; margin-top: 0.3rem; }
+    .thumbs { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1rem 0; }
+    .thumbs figure { flex: 1 1 0; min-width: 160px; margin: 0; }
+    .thumbs figcaption { font-size: 10px; }
+    .combo { color: #ccc; }
+    .live { display: inline-block; margin: 0.4rem 0; }
+    ul.ex { list-style: none; padding: 0; margin: 1rem 0; }
+    ul.ex li { margin: 0.55rem 0; }
+    ul.ex a { margin-left: 0.5rem; white-space: nowrap; }
+    ul.ex .rcp { color: #999; }
+    pre { background: #1a1a1f; border: 1px solid #222; border-radius: 4px;
+      padding: 0.8rem 1rem; overflow-x: auto; font-size: 12px; color: #cbd; line-height: 1.5; }
+    pre .c { color: #667; }
+    footer { margin-top: 3rem; color: #555; font-size: 11px; border-top: 1px solid #222; padding-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Knights <small>· gallery &amp; field notes</small></h1>
+  <div class="nav">
+    <a href="../">↩ all screensavers</a> &nbsp;·&nbsp;
+    <a href="./">▶ run knights</a> &nbsp;·&nbsp;
+    <a href="https://github.com/chrismo/screensavers/tree/main/knights">source</a>
+  </div>
+
+  <p>
+    <strong>Knights</strong> replays the <em>actual</em> turn-based solve of a
+    spiral knight-coloring — the phenomenon from Numberphile's
+    <a href="https://youtu.be/UiX4CFIiegM">Red &amp; Black Knights</a> (Neil Sloane),
+    with more in the <a href="https://www.youtube.com/watch?v=VgmDuBCayPw">Numberphile2
+    follow-up</a> — then accelerates and zooms out to reveal the emergent large-scale
+    pattern. Cells of
+    a square spiral are claimed by K colors of pieces taking turns; on a color's
+    turn it grabs the lowest-numbered cell that is <em>not occupied</em> and
+    <em>not attacked by any other color</em> (same-color attacks are allowed — that
+    asymmetry is what breeds the pattern). Controls and URL params are in the
+    <a href="README.md">README</a>; design notes in <a href="spec.md">spec.md</a>.
+  </p>
+
+  <p class="muted">
+    Each pattern below has a one-click <strong>see it live</strong> link (the solve
+    is deterministic, so the URL reproduces the exact field) and the
+    <a href="../tools/shot.mjs">tools/shot.mjs</a> commands to render and zoom it.
+  </p>
+
+  <h2>Basics — start here</h2>
+  <p>
+    The original result: just <strong>two knights</strong> taking turns, each
+    avoiding the cells the other attacks. That alone produces the famous pattern —
+    see the Numberphile videos linked above. More colors and odder pieces build
+    from this.
+  </p>
+
+  <h3>Red &amp; Black — two knights</h3>
+  <p class="combo">knight ×2 &nbsp;·&nbsp; Mono palette</p>
+  <figure>
+    <img src="img/red-black.png" alt="Two-tone knight pattern: nested concentric square frames with cross-shaped channels radiating from the center.">
+    <figcaption>The original two-color result. Out of one simple rule comes this
+      nested, self-similar structure of concentric frames and channels radiating
+      from the center — and look closely: a few tiny island defects already appear.</figcaption>
+  </figure>
+  <p class="live">
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:2&amp;extent=500&amp;speed=8&amp;palette=3&amp;panel=closed">▶ see it live</a>
+    <span class="muted">(plays the build; press <kbd>S</kbd> for the finished view)</span>
+  </p>
+
+  <h3>Three colors</h3>
+  <p class="combo">knight ×3 &nbsp;·&nbsp; Vivid palette</p>
+  <figure>
+    <img src="img/knights-3.png" alt="Three-color knight pattern: large solid wedge domains meeting at the center with striped transition zones.">
+    <figcaption>Add a third knight and the field breaks into big solid wedge domains
+      that meet at the center in finely-striped seams — same rule, one more color,
+      a very different character.</figcaption>
+  </figure>
+  <p class="live">
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:3&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <span class="muted">(plays the build; press <kbd>S</kbd> for the finished view)</span>
+  </p>
+
+  <h2>More from the videos</h2>
+  <p>
+    The <a href="https://www.youtube.com/watch?v=VgmDuBCayPw">Numberphile2 follow-up</a>
+    runs through other pieces and mixes. Here they are — one click to watch each one
+    build (in every case each color is a <em>single</em> piece type, just like the
+    videos):
+  </p>
+  <ul class="ex">
+    <li>4 knights <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:4&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
+    <li>5 knights <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:5&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
+    <li>alfil + three-leaper <a href="https://chrismo.github.io/screensavers/knights/?groups=alfil:1,threeleaper:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
+    <li>knight + antelope <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:1,antelope:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
+    <li>knight + dabbaba + wazir ×2 <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:1,dabbaba:1,wazir:2&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
+    <li>knight + zebra <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:1,zebra:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
+    <li>wazir, ferz, wazir, ferz <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir:1,ferz:1,wazir:1,ferz:1&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
+  </ul>
+
+  <h2>Compound pieces</h2>
+  <p>
+    We've also added <em>compound</em> pieces — a single color that moves as the
+    <strong>union of several leapers at once</strong>. A knight+antelope compound
+    may step like a knight <em>or</em> an antelope on any given move (the standard
+    <a href="https://en.wikipedia.org/wiki/Fairy_chess_piece">fairy-chess</a> reading
+    — an OR of the moves, not a sequence). In the videos each color is always a
+    single piece type.
+  </p>
+  <p>
+    Several of these unions are <a href="https://en.wikipedia.org/wiki/Fairy_chess_piece">named
+    fairy pieces</a> — the compound editor recreates them (then keeps going into
+    unnamed unions like knight+antelope):
+  </p>
+  <ul class="ex">
+    <li><strong>Mann</strong> <span class="rcp">/ commoner — wazir + ferz, the non-royal king</span> <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:5&amp;extent=100&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
+    <li><strong>Kirin</strong> <span class="rcp">— ferz + dabbaba (also preset 4, ×8)</span> <a href="https://chrismo.github.io/screensavers/knights/?groups=ferz-dabbaba:3&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
+    <li><strong>Phoenix</strong> <span class="rcp">— wazir + alfil</span> <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-alfil:5&amp;extent=200&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
+    <li><strong>Alibi</strong> <span class="rcp">— dabbaba + alfil</span> <a href="https://chrismo.github.io/screensavers/knights/?groups=dabbaba-alfil:3&amp;extent=600&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
+    <li><strong>Squirrel</strong> <span class="rcp">— knight + dabbaba + alfil, every cell two away</span> <a href="https://chrismo.github.io/screensavers/knights/?groups=knight-dabbaba-alfil:3&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
+    <li><strong>Frog</strong> <span class="rcp">— ferz + three-leaper</span> <a href="https://chrismo.github.io/screensavers/knights/?groups=ferz-threeleaper:3&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (×3)</a> <a href="https://chrismo.github.io/screensavers/knights/?groups=ferz-threeleaper:5&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (×5)</a></li>
+  </ul>
+  <p class="muted">
+    Rider-based compounds like the Amazon (queen + knight) aren't reachable — this
+    sketch has only leapers, no sliding pieces. Beyond the named ones, mixing
+    different <em>reaches</em> into one piece is what breeds the wilder fields below.
+  </p>
+
+  <h2>Notable patterns</h2>
+
+  <h3>Rose window — a calm pinwheel in a busy frame</h3>
+  <p class="combo">wazir+ferz ×4 &nbsp;+&nbsp; knight+antelope ×4 &nbsp;·&nbsp; Vivid palette</p>
+  <p>
+    No defect to hunt here — just a favorite. Pairing four <em>king</em> colors
+    (wazir+ferz, which cover every near neighbor and so build big coherent domains) with
+    four <em>knight+antelope</em> colors (two reaches at once, which can't settle) splits
+    the field cleanly: the king colors win the calm geometric <strong>pinwheel</strong> at
+    the center, and the restless knight+antelope colors are pushed out into an ornate,
+    carnival-like <strong>frame</strong>. The character holds at every zoom — only the
+    core-to-frame ratio shifts.
+  </p>
+
+  <div class="thumbs">
+    <figure>
+      <img src="img/rose-window-300.png" alt="Extent 300: a bold pinwheel of flat triangular sectors fills the center, ringed by a dense border of tiny colored triangles.">
+      <figcaption>Extent 300 — the pinwheel core dominates.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/rose-window-500.png" alt="Extent 500: a smaller central pinwheel inside a larger busy mosaic frame.">
+      <figcaption>Extent 500 — core and frame in balance.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/rose-window-1000.png" alt="Extent 1000: a small ordered pinwheel jewel at the center of a vast busy mosaic field.">
+      <figcaption>Extent 1000 — a small jewel in a vast field.</figcaption>
+    </figure>
+  </div>
+
+  <p class="live">
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,knight-antelope:4&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">▶ live (300)</a> &nbsp;
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,knight-antelope:4&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live (500)</a> &nbsp;
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,knight-antelope:4&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (1000)</a>
+  </p>
+
+  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,knight-antelope:4&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
+node tools/shot.mjs "$URL" rose.png 3500 --size 1000,1000   <span class="c"># swap extent=300 -&gt; 500 / 1000</span></pre>
+
+  <h3>A dotted line — ferz + wazir</h3>
+  <p class="combo">ferz ×4 &nbsp;+&nbsp; wazir ×4 &nbsp;·&nbsp; Vivid palette &nbsp;·&nbsp; extent 300</p>
+
+  <figure>
+    <img src="img/dots-defect.png" alt="Zoom on a green checkerboard domain with a short horizontal row of about five black (empty) cells embedded in it.">
+    <figcaption>A small oddity. Inside one green <em>colorbound</em> domain (the green
+      piece only lands on one checkerboard color, hence the green-on-black weave) sits a
+      tidy horizontal run of ~5 <strong>empty</strong> cells — squares the green piece
+      was blocked from at the moment their spiral-number came up, and never revisited.</figcaption>
+  </figure>
+
+  <p>
+    It's the same kind of defect as the three bugs below, but <em>lined up</em>: because
+    ferz is colorbound, the cells it gets blocked on all fall on the same sublattice, so
+    the empties string into a short row instead of scattering. Short-reach + colorbound
+    tends to make <em>linear</em> defects; the long-reach mixes below make <em>point</em>
+    ones.
+  </p>
+
+  <p class="live">
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=ferz:4,wazir:4&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <span class="muted">(the defect is tiny at full zoom — render below to find it)</span>
+  </p>
+
+  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=ferz:4,wazir:4&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
+node tools/shot.mjs "$URL" dots.png 3500 --size 1500,1500 --clip 748,622,116,86 --scale 10</pre>
+
+  <h3>Pseudo-3D pyramids — alfil + wazir, zoomed all the way out</h3>
+  <p class="combo">alfil ×4 &nbsp;+&nbsp; wazir ×4 &nbsp;·&nbsp; Vivid palette &nbsp;·&nbsp; extent 1000</p>
+
+  <figure>
+    <img src="img/pyramids-pattern.png" alt="Wide view: a speckled purple field with smooth green and yellow triangular pyramid shapes; one giant pyramid fans out from the center into the lower-right.">
+    <figcaption>A mix of a colorbound piece (alfil) and a plain one (wazir), seen at a
+      large extent. The alfil colors fill a fine speckled "sky"; the wazir colors build
+      smooth domains whose boundaries radiate from the spiral origin as straight rays —
+      so they read as <strong>triangular pyramids</strong>. The biggest has its apex
+      right at cell 0,0 and fans into the lower-right.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="img/pyramids-zoom.png" alt="Zoom on the lower-left end of the pyramid range: small green sawtooth peaks against the purple speckle, their faces filled with fine vertical striping.">
+    <figcaption>The little peaks at the left end of the "mountain range" (the giant one
+      is obvious in the wide shot). The domain wall is a self-similar
+      <strong>sawtooth</strong> of nested triangles, and each face carries fine vertical
+      striping plus a faint tonal gradient — that shading is what gives the whole thing
+      its almost-3D, lit-from-the-side look. It's an illusion: every cell is flat; the
+      gradient is just two colors interleaving at shifting density.</figcaption>
+  </figure>
+
+  <p class="live">
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=alfil:4,wazir:4&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <span class="muted">(plays the build; press <kbd>S</kbd> for the static finished view)</span>
+  </p>
+
+  <pre><span class="c"># set the URL once, then run a render below (swap host for http://localhost:8000 in dev)</span>
+URL='https://chrismo.github.io/screensavers/knights/?groups=alfil:4,wazir:4&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
+
+<span class="c"># the whole field — the giant pyramid is obvious</span>
+node tools/shot.mjs "$URL" pyramids.png 5000 --size 1100,1100
+
+<span class="c"># the two small pyramids at the left of the range</span>
+node tools/shot.mjs "$URL" zoom.png 5000 --size 1500,1500 --clip 400,950,310,200 --scale 5</pre>
+
+  <h3>Three diagonal bugs — 8-color mixed roster</h3>
+  <p class="combo">knight ×4 &nbsp;+&nbsp; knight+antelope ×3 &nbsp;+&nbsp; dabbaba+three-leaper ×1 &nbsp;·&nbsp; Vivid palette</p>
+
+  <figure>
+    <img src="img/three-bugs-pattern.png" alt="The full finished field: a turbulent 8-color mosaic with a large solid red domain in one corner.">
+    <figcaption>The finished field (~2.7M cells). Mixing three different reaches —
+      knight (2), three-leaper (3), antelope (4) — plus a colorbound dabbaba breaks
+      any clean periodicity into broadband turbulence, with one big solid red
+      domain claiming an uncontested corner.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="img/three-bugs-zoom.png" alt="Zoom on the red domain: three small speckled 'bug' defects strung along the diagonal, plus the black border to the yellow region.">
+    <figcaption>Zoom on the red domain. Three tiny <strong>"bug" defects</strong>
+      sit along its main diagonal — knots of empty (black) cells speckled with a few
+      cells other colors stole (note the recurring green Knight pixel). The corner
+      bug perches on the black "domain wall" — a 1-cell-wide line of empty cells
+      separating red from yellow.</figcaption>
+  </figure>
+
+  <p>
+    These only appear once <strong>long-reach compound pieces</strong> are in the
+    roster: a single far-away piece (antelope reach-4, three-leaper reach-3) can
+    veto one specific cell deep inside another color's territory, seeding a defect.
+    Two kinds show up — <em>interior islands</em> (specks deep in a solid field) and
+    <em>domain-wall</em> defects (blooms along the borders). Plain short-reach
+    knights can't reach in like this, so you mostly see clean domains instead.
+  </p>
+
+  <p class="live">
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:4,knight-antelope:3,dabbaba-threeleaper:1&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <span class="muted">(plays the build at full tilt; press <kbd>S</kbd> for the static finished view)</span>
+  </p>
+
+  <pre><span class="c"># set the URL once, then run any render below (swap host for http://localhost:8000 in dev)</span>
+URL='https://chrismo.github.io/screensavers/knights/?groups=knight:4,knight-antelope:3,dabbaba-threeleaper:1&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
+
+<span class="c"># the whole finished pattern</span>
+node tools/shot.mjs "$URL" pattern.png 2800 --size 1100,1100
+
+<span class="c"># the three bugs + red/yellow corner (they sit at world (752,756) -> (810,810) -> (848,848))</span>
+node tools/shot.mjs "$URL" bugs.png 3500 --size 6000,6000 --clip 5190,390,420,420 --scale 3</pre>
+
+  <footer>
+    Patterns found by playing with the roster. See the pattern taxonomy in
+    <a href="../ideas.md">ideas.md</a>. More finds get added here over time.
+  </footer>
+
+  <!-- Template for a new entry:
+  <h3><name> — <one-line></h3>
+  <p class="combo"><combo> · <palette></p>
+  <figure><img src="img/<file>.png" alt="..."><figcaption>...</figcaption></figure>
+  <p>...what's interesting and why...</p>
+  <p class="live"><a href="https://chrismo.github.io/screensavers/knights/?groups=...&panel=closed">▶ see it live</a></p>
+  <pre>URL='...'
+  node tools/shot.mjs "$URL" out.png 2800
+  # zoom: node tools/shot.mjs "$URL" zoom.png 3500 --size 6000,6000 --clip x,y,w,h --scale 3</pre>
+  -->
+</body>
+</html>
