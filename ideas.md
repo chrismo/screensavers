@@ -93,6 +93,68 @@ banks** (one per cluster); a **"surprise me"** that samples diverse families;
 playing/watching more than instrumenting. Captured so the taxonomy doesn't have
 to be re-derived.)
 
+### Findings from a render sweep (2026-06-13)
+
+A predict-then-render pass over many knights rosters (scratch writeups in
+`tmp/explore/notes.md` + `mix-notes.md`; exemplars now in `knights/gallery.html`)
+validated the by-input predictors above and added several axes/families.
+
+**New / refined families (by output):**
+
+- **Pinwheel / sunburst** (refines "pinwheel/radial" above) — large flat angular
+  sectors meeting at a central singularity. Comes from short-reach pieces with *full
+  nearest-neighbor coverage* (the "king" = wazir+ferz). Tunable by K (see sweet-spot).
+- **Circuit-board / labyrinth (maze)** — winding Manhattan-routed colored conduits
+  separated by black domain-wall seams. Recipe: a domain-forming short piece (king)
+  **+ exactly ONE long-reach piece**, whose far vetoes carve walls through the king's
+  fat domains. The long piece's reach tunes it: knight (r2) → tight architectural
+  terraces; zebra (r3) → dense PCB with "solder pads"; antelope (r4) → long flowing
+  conduits. (Without the domain-former it's just static — the king builds the domains
+  the long piece then carves.)
+- **Pyramids / sawtooth** — a colorbound piece fills a speckled "sky" while a plain
+  piece builds smooth domains whose walls radiate from the spiral origin as straight
+  rays → triangular "pyramids" with self-similar sawtooth edges and striped/gradient
+  faces that read as pseudo-3D shading. (gallery: *Pyramids*.)
+
+**New by-input axes:**
+
+- **Neighbor-coverage** — short reach + FULL nearest-neighbor coverage makes LARGE
+  angular sectors, the *opposite* of the "small mosaic" you'd guess from short reach:
+  each color, blocking every neighbor, claims a whole angular wedge.
+- **Sweet-spot K for domain-formers** — a too-"matched" K collapses to four flat
+  quadrants (king at K=4; the colorbound trio ferz+dab+alfil at K=8). Richness lives
+  at intermediate K (~6).
+
+**Defect refinement** (extends the *defects* sub-feature above) — defects split by
+reach × colorboundness: short-reach *colorbound* pieces get blocked on a single
+sublattice, so their empties align into **linear** (row/column) defects; long-reach
+mixes scatter **point** (island) defects. (gallery: *A dotted line* vs *Three
+diagonal bugs*.)
+
+**Mixing compounds across colors (heterogeneous rosters)** — the richest axis:
+different color groups get different compounds, so colors compete asymmetrically.
+
+- **Dichotomy > diversity.** One clear two-regime contrast beats many-way blends
+  (which average back to a pinwheel or to uniform busy). Pick TWO contrasting types
+  and let them segregate.
+- **Contrast flavors:** *smooth-vs-grain* (non-CB vs CB at equal counts → a "petal
+  flower" of alternating satin/velvet wedges; grain agent alfil > ferz, smooth agent
+  must be the weak wazir — knight is too domain-capable); *calm-vs-busy*
+  (domain-former vs disruptor); *muted-vs-vivid* (dabbaba's sparse fill reads
+  desaturated → antique/watercolor palettes — dabbaba is the "muted agent").
+- **Chaos-placement dial:** a disruptor that *can* form domains (has a near-neighbor
+  component, e.g. knight+antelope) is pushed to a busy outer FRAME around a calm core;
+  a *purely* long-reach disruptor (zebra/antelope alone) can't claim territory, so it
+  dumps its interference at the spiral CENTER → busy core, calm radial frame.
+  (gallery: *Rose window* vs *Chrysanthemum* — inverses.)
+- **High-coverage colors win the center;** long-reach accent colors concentrate their
+  chaos at the spiral origin (where all cursors converge).
+
+**Deterministic nesting** — solve order doesn't depend on extent, so a small-extent
+field is exactly the *center* of a large-extent one; raising the extent only reveals
+new outer regions butting against the same core. (gallery: *Muted & vivid*, 300 vs
+1000.)
+
 ## Image export — save the current frame as a PNG
 
 Applies to any canvas sketch. A key / panel button that grabs the current canvas
