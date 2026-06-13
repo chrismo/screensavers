@@ -145,7 +145,12 @@
     different <em>reaches</em> into one piece is what breeds the wilder fields below.
   </p>
 
-  <h2>Notable patterns</h2>
+  <h2>Interesting combinations</h2>
+  <p class="muted">
+    Some combos earn a spot just by looking good — no defect to hunt, the whole field
+    is the point. These first two are inverses of each other: where one keeps the calm
+    in the center, the other keeps it at the edges.
+  </p>
 
   <h3>Rose window — a calm pinwheel in a busy frame</h3>
   <p class="combo">wazir+ferz ×4 &nbsp;+&nbsp; knight+antelope ×4 &nbsp;·&nbsp; Vivid palette</p>
@@ -182,6 +187,44 @@
 
   <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,knight-antelope:4&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
 node tools/shot.mjs "$URL" rose.png 3500 --size 1000,1000   <span class="c"># swap extent=300 -&gt; 500 / 1000</span></pre>
+
+  <h3>Chrysanthemum — a busy core in a calm frame</h3>
+  <p class="combo">wazir+ferz ×4 &nbsp;+&nbsp; zebra ×4 &nbsp;·&nbsp; Vivid palette &nbsp;·&nbsp; extent 300</p>
+  <figure>
+    <img src="img/chrysanthemum.png" alt="A pinwheel of large flat color sectors radiating outward from a turbulent dithered bloom at the very center, with feathery plumes.">
+    <figcaption>Big clean radial sectors around a turbulent speckled bloom at the
+      center — a chrysanthemum, or a firework caught mid-burst.</figcaption>
+  </figure>
+  <p>
+    Same king colors (wazir+ferz) as the rose window, but paired with a <em>single</em>
+    long-reach piece (zebra) instead of the knight+antelope compound. A pure long-reach
+    piece can't build domains of its own, so rather than forming an outer frame it dumps
+    all its interference at the spiral origin — flipping the composition: a calm radial
+    frame around a busy core, the rose window turned inside out.
+  </p>
+
+  <p>Two details near the core reward a closer look:</p>
+  <div class="thumbs">
+    <figure>
+      <img src="img/chrysanthemum-dots.png" alt="Zoom: a magenta region filled with a regular lattice of small black holes, like a halftone dot-screen.">
+      <figcaption>Where a magenta sector meets the spray it fills in as a regular
+        <strong>dot-screen</strong> — a halftone of holes, not a solid block.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/chrysanthemum-spike.png" alt="Zoom: a green triangular spike poking up into a blue field, with a turbulent blue-and-purple spray fraying out beneath it.">
+      <figcaption>A green domain <strong>spike</strong> juts up into the blue while the
+        zebra spray frays out beneath it — like a little jellyfish.</figcaption>
+    </figure>
+  </div>
+
+  <p class="live">
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,zebra:4&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <span class="muted">(plays the build; press <kbd>S</kbd> for the static finished view)</span>
+  </p>
+  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,zebra:4&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
+node tools/shot.mjs "$URL" chrysanthemum.png 3500 --size 1000,1000</pre>
+
+  <h2>Notable patterns</h2>
 
   <h3>A dotted line — ferz + wazir</h3>
   <p class="combo">ferz ×4 &nbsp;+&nbsp; wazir ×4 &nbsp;·&nbsp; Vivid palette &nbsp;·&nbsp; extent 300</p>
