@@ -12,19 +12,12 @@ canonical autoplay form for screensaver use adds `?nopanel=1&lerp=1`
   simulation. See [petri-dish/README.md](petri-dish/README.md) for
   controls, presets, and supported URL params.
   Live: https://chrismo.github.io/screensavers/petri-dish/
-- [knights/](knights/) — spiral knight-coloring that zooms out from the
-  center to reveal the emergent large-scale pattern (after Numberphile's
-  "Red & Black Knights"). See [knights/README.md](knights/README.md) for
-  controls and URL params.
+- [knights/](knights/) — "how it's built": replays the actual turn-based
+  knight-coloring solve, narrating each placement decision while zoomed in, then
+  accelerating and interleaving to reveal the emergent large-scale pattern (after
+  Numberphile's "Red & Black Knights"). See [knights/README.md](knights/README.md)
+  for controls and URL params.
   Live: https://chrismo.github.io/screensavers/knights/
-
-## Labs
-
-- [knights-lab/](knights-lab/) — "how it's built": a companion to `knights/`
-  that replays the actual turn-based solve, narrating each placement decision
-  while zoomed in, then accelerating and interleaving to fill the field. See
-  [knights-lab/README.md](knights-lab/README.md) for controls and URL params.
-  Live: https://chrismo.github.io/screensavers/knights-lab/
 
 ## Running as a screensaver / desktop
 

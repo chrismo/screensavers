@@ -1,16 +1,21 @@
-# knights-lab → knights v2 — parity spec
+# knights — design notes & migration history
 
-## Goal
+> **CUTOVER DONE (2026-06-12, v1.20).** The Canvas2D "how it's built" sketch (V2,
+> formerly `knights-lab/`) replaced the original WebGL `knights/` (V1) — V1 is
+> deleted, V2 now lives at `knights/`, and the gallery's "labs" entry is gone.
+> This doc is kept as the design rationale + migration record; the parity table
+> below tracks what V1 had and how V2 covers it.
 
-`knights-lab/` (V2, Canvas2D, "how it's built") is intended to grow into the
-successor of `knights/` (V1, WebGL, the zoomed-out pattern). Plan: iterate V2
-side by side until it's a **superset** of V1, then strangler-fig the cutover —
-flip the index label, eventually point `knights/` at V2 (rename / redirect).
-We are NOT touching the index promotion or deleting V1 yet.
+## Goal (original, now met)
 
-This doc enumerates the differences, especially **things V1 has that V2 doesn't**
-(the parity gaps to close), plus V2-only additions to preserve and the open
-design decisions.
+`knights-lab/` (V2, Canvas2D, "how it's built") was built to become the successor
+of `knights/` (V1, WebGL, the zoomed-out pattern): iterate V2 side by side until
+it's a **superset** of V1, then strangler-fig the cutover. That cutover is now
+done (see banner above).
+
+This doc enumerates the differences, especially **things V1 had that V2 didn't**
+(the parity gaps — now closed or resolved), plus V2-only additions and the design
+decisions.
 
 ## Parity gaps — V1 has it, V2 doesn't (close these)
 
@@ -113,8 +118,9 @@ drifting. (V2's `solveSteps` is the instrumented superset of V1's `simulate`.)
   likely want this.)
 
 **Still open**
-1. **Details default:** always-on-with-auto-hide (current behavior) vs a visible
-   toggle; what `?details=` / key.
+1. ~~**Details default:**~~ **DONE (v1.20):** narration overlay is on by default
+   (auto-hides when zoomed out) AND has an explicit toggle — `D` key, panel row,
+   `?details=0`, carried into the copied screensaver URL. Off = field + grid only.
 3. **Symmetric (invertible) stepping — deferred, not blocked.** Forward stepping
    (`commitAt`) is incremental (cost ∝ distance stepped); backward stepping is
    O(head) because three pieces of forward state are a *lossy fold* — cheap to
@@ -138,11 +144,14 @@ drifting. (V2's `solveSteps` is the instrumented superset of V1's `simulate`.)
 ## Suggested order of work
 
 1. ~~**Typed-array sequence rework** (#1) → unlock extent 1024.~~ **DONE (v1.11).**
-   `?extent=1024` works; default stays 60. (`?details=0` still TODO.)
 2. ~~**Static/finished mode** (#3) + settle the **timing model** (#4).~~ **DONE
-   (v1.13).** `speed=0` static; `speed` model kept. (`?details=0` still TODO.)
-3. **Reveal-mode decision** (#2/#5) — if bringing the sweep over, that's the big
-   visual piece.
-4. **Preset reconcile** (#6), **extent step** (#7).
-5. **Extract `knights/core.js`** and de-dupe (shared-core debt).
-6. Strangler cutover: index label → "Knights v2", then repoint `knights/`.
+   (v1.13).** `speed=0` static; `speed` model kept.
+3. ~~**Details toggle.**~~ **DONE (v1.20):** `D` / panel / `?details=0`.
+4. ~~**Preset reconcile** (#6), **extent step** (#7).~~ **DONE (v1.16/1.19):**
+   extent ladder; presets refreshed (Ferz+Dab ×8, Wa+Fe+Dab ×6, 8-mix in).
+5. ~~**Strangler cutover.**~~ **DONE (2026-06-12, v1.20):** V1 deleted, V2 promoted
+   to `knights/`, gallery "labs" entry removed (see banner up top).
+6. **Reveal-mode decision** (#2/#5) — only if the WebGL glow-sweep is ever wanted
+   back as an optional mode (resolved as NOT required; low priority / maybe never).
+   The shared-core extraction is now moot — with V1 gone, V2's inline copy is the
+   only one, so there's nothing to de-dupe.

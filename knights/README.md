@@ -1,72 +1,88 @@
-# knights
+# knights — how it's built
 
-A spiral coloring screensaver from Numberphile's **"Red & Black Knights
-(extraordinary result)"** (Neil Sloane & Jonas Karlsson, May 2026) and its
-follow-up *"Amazing Chessboard Patterns."*
+Replays the **actual turn-based placement** of the knights spiral-coloring,
+narrating *why* each cell gets its color, then accelerating and zooming out to
+reveal the emergent large-scale pattern.
 
-Cells of an infinite square spiral are claimed by `K` colors of pieces taking
-turns. On a color's turn it grabs the lowest-numbered cell that is **not
-occupied and not attacked by any *other* color** — same-color pieces *are*
-allowed to attack each other, and that asymmetry is what breeds the large-scale
-structure. With 2+ colors the plane splits into colored regions with chaotic
-bands along the axes; the interesting structure only emerges past ~100k–1M+
-placed cells.
+The rule (from Numberphile's "Red & Black Knights"): cells of a square spiral
+are claimed by K colors of pieces taking turns. On a color's turn it grabs the
+lowest-numbered cell that is **not occupied** and **not attacked by any other
+color** (same-color attacks are allowed — that asymmetry is what breeds the
+large-scale pattern).
 
-Colors are configured as **PIECE-SET × COUNT groups** — each group is a set of
-leapers (a *compound* piece whose moves are the union) and how many color-slots
-use it; the total colors are the sum. One group (`Knight × 3`) is the classic
-3-color knight; several groups reproduce the Numberphile2 per-piece combos
-(e.g. `Knight × 2 · Zebra × 1`); a multi-leaper group is a compound piece
-(e.g. `Knight+Zebra × 3`). Total colors are capped at 8.
+It **narrates** that decision and then lets it run:
 
-The whole pattern is simulated once into a grid (≈70 ms for the ~1M-cell
-default) and baked into a single texture. A raw-WebGL fragment shader then
-**sweeps a reveal front along the numbering spiral** — a single point laying
-color outward with a glowing leading edge — while a centered window zooms to
-keep the sweeping head in frame. The reveal rate accelerates from a handful of
-cells to tens of thousands per second, starting on the single center cell.
+1. **Narrate** (slow, zoomed in) — the active color's cursor walks the spiral to
+   a candidate. Cells it skips flash with the reason: a white **✕** over a cell
+   attacked by an enemy color, a plain outline over an already-occupied cell. On
+   a legal cell it drops in its color and outlines the squares it now threatens.
+   A caption names the piece and what it's doing. While the cursor sits on an
+   enemy-blocked cell, a **line + glow** points to the enemy piece(s) attacking
+   it (in their color), so you can see exactly *why* it's skipped. A persistent
+   **pin** marks where each color last left off, so all the cursors stay trackable
+   as the field fills.
+2. **Interleave** (fast, zooming out) — as the run accelerates and cells get too
+   small to read, the overlay drops and the K cursors just fill the field,
+   building the emergent large-scale pattern.
 
-The **reveal** mode switches this between `spiral` (the sweep, default),
-`square` (whole rings pop in at once), and `all` (the finished pattern, just
-zoomed).
-
-Live: https://chrismo.github.io/screensavers/knights/
+Renderer is **Canvas2D**: the committed field is blitted from a 1px-per-cell
+offscreen canvas in one draw call per frame, so it scales to large extents; the
+narration overlay is drawn on top only while zoomed in.
 
 ## Controls
 
-Open the drawer (the `›` tab on the left edge) to tune:
-
-| Param | What it does |
+| Key | Action |
 | --- | --- |
-| **pieces** | PIECE-SET × COUNT groups. Each group shows its selected leapers as chips (tap a chip to remove); the `＋` reveals the rest to add (two+ leapers in a group = a compound piece, moves unioned). `− +` sets how many colors use the group; the swatches show those colors; `✕` removes the group; *+ add color group* adds one. Roster: knight `(2,1)`, wazir `(1,0)`, ferz `(1,1)`, dabbaba `(2,0)`, alfil `(2,2)`, three-leaper `(3,0)`, zebra `(3,2)`, antelope `(4,3)`. Total colors 2–8. |
-| **extent** | How far the spiral is computed (max shell). Bigger reveals more pattern; costs more to simulate. |
-| **reveal** | How cells appear: `spiral` (point sweeps the spiral with a glowing head), `square` (whole rings pop in), `all` (finished pattern, just zoomed). |
-| **zoom** | Seconds for one full zoom-out. `0` = hold on the finished image (no animation) — handy for inspecting combos. |
-| **palette** | Color scheme (colors are generated to evenly span the hue wheel for however many colors the groups total). |
-| **cycle** (`L`) | When on, advance to the next preset each time a run finishes (rotating through the whole preset roster). |
+| `Space` / `P` | pause / resume |
+| `←` `→` | when paused: step one placement back / forward; when running: slower / faster (at speed 0 → **static**) |
+| `[` `]` | shrink / grow the computed extent (re-solves) |
+| `K` | cycle palette |
+| `S` | toggle **static** mode — jump to the finished pattern and hold (a clean wallpaper, no animation/overlay); toggle off to restart the build |
+| `D` | toggle **details** — the narration overlay; off = a pure screensaver (just the building field + grid) |
+| `L` | toggle preset cycling (rotate presets between runs) |
+| `R` | restart the run |
+| `C` | copy a `?nopanel=1` screensaver URL of the current state |
+| `F` | fullscreen |
+| `H` | hide / show the control panel |
+| `0`–`9` | jump to a preset |
 
-Keys: `←/→` zoom speed, `[ ]` extent, `K` cycle palette, `M` cycle reveal mode,
-`L` toggle preset cycling, `1–9` presets, `R` restart zoom, `C` copy screensaver
-URL, `F` fullscreen, `H` hide panel. (Piece groups are mouse/touch-only.)
+The panel's **pieces** section is the full group editor: each color group is a
+set of leapers (a compound piece) × a count; total colors = the sum (capped at
+8). Add/remove leaper chips, adjust counts, add/remove groups; the swatches show
+each group's actual colors.
 
-## URL params (for autoplay / screensaver use)
+## URL params
 
-`groups` (pieces joined by `-`, count after `:`, groups comma-separated — e.g.
-`groups=knight-zebra:2,wazir:1`), `extent`, `zoom`, `palette`, `reveal`,
-`start` (initial zoom phase 0–1, to resume mid-sweep), `cycle=1` (rotate through
-presets), `nopanel=1` (hide the panel), and `panel=open` (open the drawer on
-load). `C` / *copy screensaver URL* builds
-a URL reproducing the current settings, e.g.:
+- `groups=knight-zebra:2,wazir:1` — color groups. Pieces in a group joined by
+  `-` (a compound leaper), count after `:`, groups separated by `,`. (`-` not
+  `+`: in a query string `+` decodes to a space.) Roster: `knight`, `wazir`,
+  `ferz`, `dabbaba`, `alfil`, `threeleaper`, `zebra`, `antelope`.
+- `extent=24` — spiral half-extent S (grid is (2S+1)²). Steps on a ladder
+  (`24 · 100 · 200 · … · 1000`); the panel arrows / `[` `]` move between rungs and
+  a URL value snaps to the nearest. Small (the `24` default) keeps the solve
+  readable; bigger plays longer before it fills.
+- `speed=3` — overall tempo as a **level** `0`–`8` (shown in the panel as the
+  level number; default `3`). Higher = faster; it scales both the narrated crawl
+  and the rate the ramp accelerates from. The levels are a geometric ladder
+  (`1/16 · 1/8 · 1/4 · 1/2 · 1 · 2 · 4 · 8` placements/sec) — the slow rungs are
+  very leisurely. (The per-cell drop is always a quick pop, independent of level.)
+  `speed=0` (or `static=1`) is **static** mode: skip the build, hold on the
+  finished pattern (handy as a wallpaper or for inspecting a combo).
+- `palette=0` — 0 Vivid · 1 Neon · 2 Pastel · 3 Mono.
+- `start=0.5` — start the timeline at this fraction (pre-fills that much, handy
+  for inspecting the zoomed-out end state).
+- `details=0` — hide the narration overlay (pure-screensaver look).
+- `cycle=1` — rotate to the next preset between runs.
+- `nopanel=1` — hide the panel (screensaver mode).
 
-`https://chrismo.github.io/screensavers/knights/?groups=knight-zebra:2,wazir:1&extent=512&zoom=90&palette=0&reveal=spiral&nopanel=1`
+Example: a 6-color Ferz+Dabbaba compound, mid-run —
+`?groups=ferz-dabbaba:6&start=0.5&nopanel=1`.
 
-## References
+## Notes
 
-- Numberphile: [Red & Black Knights (extraordinary result)](https://youtu.be/UiX4CFIiegM) · [Amazing Chessboard Patterns (extra)](https://youtu.be/VgmDuBCayPw)
-- OEIS [A392177](https://oeis.org/A392177) / [A392178](https://oeis.org/A392178) (red & black knights), [A308885](https://oeis.org/A308885) (single color)
-
-## Licensing
-
-Original code, MIT (the repo default) — the construction is mathematics from
-the sources above; this is an independent reimplementation, not a port of the
-OEIS reference programs.
+This Canvas2D "how it's built" view replaced an earlier WebGL sketch that swept
+the finished pattern — the per-cursor construction-order reveal shows dynamics
+the uniform sweep averaged away. See [`spec.md`](spec.md) for the design
+decisions and migration history. Generic panel/page chrome is shared with the
+rest of the gallery via `../panel.js` and `../chrome.js`; the knights-specific
+solver and piece math live inline here.
