@@ -19,6 +19,8 @@ canonical autoplay form for screensaver use adds `?nopanel=1&lerp=1`
   for controls and URL params.
   Live: https://chrismo.github.io/screensavers/knights/
 
+Cross-sketch ideas / backlog live in [ideas.md](ideas.md).
+
 ## Running as a screensaver / desktop
 
 Open a sketch, tune the panel to taste, press `C` (or click *copy

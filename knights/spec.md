@@ -116,6 +116,8 @@ drifting. (V2's `solveSteps` is the instrumented superset of V1's `simulate`.)
   signature narrate→interleave→zoom-out reveal, which is the whole point at scale.
   (Discussed & deferred 2026-06; user likes the slow-watching direction so will
   likely want this.)
+- **Preset banks / URL-carried presets** — a *cross-sketch* idea, so it lives in
+  the repo-root [`../ideas.md`](../ideas.md), not here.
 
 **Still open**
 1. ~~**Details default:**~~ **DONE (v1.20):** narration overlay is on by default
