@@ -224,6 +224,54 @@ node tools/shot.mjs "$URL" rose.png 3500 --size 1000,1000   <span class="c"># sw
   <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,zebra:4&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
 node tools/shot.mjs "$URL" chrysanthemum.png 3500 --size 1000,1000</pre>
 
+  <h3>Muted &amp; vivid — dabbaba + ferz</h3>
+  <p class="combo">dabbaba ×3 &nbsp;+&nbsp; ferz ×3 &nbsp;·&nbsp; Vivid palette</p>
+  <p>
+    Two colorbound pieces, but with very different fills: ferz lands densely and reads in
+    full Vivid color, while dabbaba's sparser jumps leave its domains looking washed-out and
+    <strong>dusty</strong>. The contrast gives the whole thing a faded, antique-watercolor
+    palette you don't get anywhere else.
+  </p>
+  <p>
+    The fun part is the extent. The solve is identical toward the center either way, so the
+    extent-300 field is just the <em>middle</em> of the extent-1000 one — but pushing out to
+    1000 lets whole new color regions appear and <strong>butt up against</strong> that same
+    familiar core:
+  </p>
+  <div class="thumbs">
+    <figure>
+      <img src="img/antique-300.png" alt="Extent 300: muted dusty pastel fields meeting along a central seam, with a turbulent core.">
+      <figcaption>Extent 300 — the dusty core on its own.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/antique-1000.png" alt="Extent 1000: the same core, now flanked by new layered and dripping color regions out toward the edges.">
+      <figcaption>Extent 1000 — same core, new regions out past it.</figcaption>
+    </figure>
+  </div>
+
+  <p>Two of those new regions up close:</p>
+  <div class="thumbs">
+    <figure>
+      <img src="img/antique-strata.png" alt="Zoom: pastel layered ridges stacked like sediment strata or topographic contour lines.">
+      <figcaption><strong>Strata</strong> — pastel ridges layered like sediment.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/antique-drips.png" alt="Zoom: bulbous vertical drips of purple, yellow and blue hanging from a diagonal edge, like melting wax.">
+      <figcaption><strong>Drips</strong> — bulbous stalactites, like melting wax.</figcaption>
+    </figure>
+  </div>
+
+  <p class="live">
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=dabbaba:3,ferz:3&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">▶ live (300)</a> &nbsp;
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=dabbaba:3,ferz:3&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (1000)</a>
+  </p>
+
+  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=dabbaba:3,ferz:3&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
+node tools/shot.mjs "$URL" antique.png 5000 --size 1000,1000
+<span class="c"># strata (right) and drips (lower-left):</span>
+node tools/shot.mjs "$URL" strata.png 5000 --size 1500,1500 --clip 1130,430,355,310 --scale 3
+node tools/shot.mjs "$URL" drips.png 5000 --size 1500,1500 --clip 320,950,430,420 --scale 3</pre>
+
   <h2>Notable patterns</h2>
 
   <h3>A dotted line — ferz + wazir</h3>
