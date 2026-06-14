@@ -380,6 +380,50 @@ node tools/shot.mjs "$URL" pattern.png 2800 --size 1100,1100
 <span class="c"># the three bugs + red/yellow corner (they sit at world (752,756) -> (810,810) -> (848,848))</span>
 node tools/shot.mjs "$URL" bugs.png 3500 --size 6000,6000 --clip 5190,390,420,420 --scale 3</pre>
 
+  <h3>One saboteur, one grain — knight + antelope</h3>
+  <p class="combo">knight ×7 &nbsp;+&nbsp; antelope ×1 &nbsp;·&nbsp; Vivid palette &nbsp;·&nbsp; extent 500</p>
+
+  <figure>
+    <img src="img/d2-field.png" alt="Seven knight colors in vivid radial sectors around a dark turbulent bloom at the center.">
+    <figcaption>Seven knights plus a <em>single</em> bare antelope. The antelope (reach 4)
+      can't hold territory of its own, so it scrambles into a turbulent bloom at the
+      center while the knights take clean radial sectors. But its long reach still
+      vetoes lone cells deep inside those sectors — seeding defects.</figcaption>
+  </figure>
+
+  <p>The same defect species turns up twice — and lined up the same way:</p>
+  <div class="thumbs">
+    <figure>
+      <img src="img/d2-ringstring.png" alt="A clean diagonal string of hollow empty-cell rings descending across a solid red domain.">
+      <figcaption>A clean <strong>string of hollow rings</strong> descending the red domain.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/d2-island.png" alt="A solid green domain with an isolated black-and-magenta island knot floating in it and bead-blooms along the lower border.">
+      <figcaption>The same beads in green — a stray <strong>island</strong> knot, plus blooms along the wall.</figcaption>
+    </figure>
+  </div>
+
+  <p>
+    The striking part: <strong>every</strong> defect the antelope seeds runs along the
+    <em>same diagonal</em> — its own [4,3] move-line. So a lone saboteur gives the whole
+    field one consistent <strong>grain</strong>. It's the same idea as the crosshair
+    defect (a piece's <em>symmetry</em> printed as a shape); here the piece's
+    <em>reach direction</em> is printed as the <em>orientation</em> of every defect. The
+    menagerie below uses <em>two</em> different long pieces — two crossing grains — which
+    is why its critters look so much more tangled and varied.
+  </p>
+
+  <p class="live">
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:7,antelope:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <span class="muted">(plays the build; press <kbd>S</kbd> for the static finished view)</span>
+  </p>
+
+  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=knight:7,antelope:1&amp;extent=500&amp;speed=0&amp;palette=0&amp;nopanel=1'
+node tools/shot.mjs "$URL" d2.png 4000 --size 1000,1000
+<span class="c"># the ring-string (red, upper-right) and the island (green, lower-right):</span>
+node tools/shot.mjs "$URL" rings.png 4000 --size 1600,1600 --clip 1240,55,350,300 --scale 4
+node tools/shot.mjs "$URL" island.png 4000 --size 1600,1600 --clip 1300,1260,300,300 --scale 4</pre>
+
   <h3>The D6 menagerie — one roster, a whole zoo of defects</h3>
   <p class="combo">knight ×6 &nbsp;+&nbsp; knight+antelope ×1 &nbsp;+&nbsp; dabbaba+three-leaper ×1 &nbsp;·&nbsp; Vivid palette</p>
   <p>
