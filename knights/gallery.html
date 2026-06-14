@@ -272,6 +272,52 @@ node tools/shot.mjs "$URL" antique.png 5000 --size 1000,1000
 node tools/shot.mjs "$URL" strata.png 5000 --size 1500,1500 --clip 1130,430,355,310 --scale 3
 node tools/shot.mjs "$URL" drips.png 5000 --size 1500,1500 --clip 320,950,430,420 --scale 3</pre>
 
+  <h3>Rainbow corduroy — knight + three-leaper</h3>
+  <p class="combo">knight+three-leaper ×6 &nbsp;·&nbsp; Vivid palette &nbsp;·&nbsp; extent 300</p>
+  <figure>
+    <img src="img/corduroy.png" alt="The whole field woven into fine diagonal multicolor twill, like iridescent raw silk.">
+    <figcaption>One compound (knight+three-leaper, reaches 2 and 3), all six colors the
+      same — no dominance, no big domains, just the whole field woven into fine diagonal
+      rainbow <strong>twill</strong>, like iridescent raw silk.</figcaption>
+  </figure>
+  <p>It carries a couple of defects riding in the weave:</p>
+  <div class="thumbs">
+    <figure>
+      <img src="img/corduroy-island.png" alt="An orange blotch sitting at the seam where a cross-hatch region meets the diagonal twill.">
+      <figcaption>an orange <strong>island</strong> at a texture seam</figcaption>
+    </figure>
+    <figure>
+      <img src="img/corduroy-bar.png" alt="A solid coral-red bar slicing diagonally between the twill and a finer speckle.">
+      <figcaption>a solid red <strong>domain-bar</strong> slicing the weave</figcaption>
+    </figure>
+  </div>
+  <p class="live">
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight-threeleaper:6&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <span class="muted">(plays the build; press <kbd>S</kbd> for the static finished view)</span>
+  </p>
+  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=knight-threeleaper:6&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
+node tools/shot.mjs "$URL" corduroy.png 3500 --size 1000,1000
+<span class="c"># the island (top-left) and the red bar (lower-right):</span>
+node tools/shot.mjs "$URL" island.png 3500 --size 1500,1500 --clip 110,60,280,240 --scale 4
+node tools/shot.mjs "$URL" bar.png 3500 --size 1500,1500 --clip 1180,1185,280,255 --scale 4</pre>
+
+  <h3>Carnival — three reach-scales at once</h3>
+  <p class="combo">wazir+ferz ×2 &nbsp;+&nbsp; knight+dabbaba ×2 &nbsp;+&nbsp; zebra+antelope ×2 &nbsp;·&nbsp; Vivid palette &nbsp;·&nbsp; extent 300</p>
+  <figure>
+    <img src="img/carnival.png" alt="A dense field of tiny colorful triangular flags and totems over black seams, with a calmer pinwheel of larger triangles at the center.">
+    <figcaption>A deliberately <em>graded</em> roster — short (the king), medium
+      (knight+dabbaba), and long (zebra+antelope), two colors each. Rather than one
+      texture winning, the three scales blend into a dense folk-art <strong>carnival</strong>
+      of tiny triangular bunting and totems, with a calmer pinwheel at the core. The
+      "many scales blended" counterpoint to the dichotomy pieces above.</figcaption>
+  </figure>
+  <p class="live">
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:2,knight-dabbaba:2,zebra-antelope:2&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <span class="muted">(plays the build; press <kbd>S</kbd> for the static finished view)</span>
+  </p>
+  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:2,knight-dabbaba:2,zebra-antelope:2&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
+node tools/shot.mjs "$URL" carnival.png 3500 --size 1000,1000</pre>
+
   <h2>Notable patterns</h2>
 
   <h3>A dotted line — ferz + wazir</h3>
