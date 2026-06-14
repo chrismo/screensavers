@@ -267,7 +267,8 @@ node tools/shot.mjs "$URL" chrysanthemum.png 3500 --size 1000,1000</pre>
   </p>
 
   <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=dabbaba:3,ferz:3&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
-node tools/shot.mjs "$URL" antique.png 5000 --size 1000,1000
+<span class="c"># render big (cells >= pixels) so the fine checker reads as smooth dusty tone, not moire</span>
+node tools/shot.mjs "$URL" antique.png 5500 --size 2000,2000
 <span class="c"># strata (right) and drips (lower-left):</span>
 node tools/shot.mjs "$URL" strata.png 5000 --size 1500,1500 --clip 1130,430,355,310 --scale 3
 node tools/shot.mjs "$URL" drips.png 5000 --size 1500,1500 --clip 320,950,430,420 --scale 3</pre>
