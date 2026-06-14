@@ -380,6 +380,53 @@ node tools/shot.mjs "$URL" pattern.png 2800 --size 1100,1100
 <span class="c"># the three bugs + red/yellow corner (they sit at world (752,756) -> (810,810) -> (848,848))</span>
 node tools/shot.mjs "$URL" bugs.png 3500 --size 6000,6000 --clip 5190,390,420,420 --scale 3</pre>
 
+  <h3>The D6 menagerie — one roster, a whole zoo of defects</h3>
+  <p class="combo">knight ×6 &nbsp;+&nbsp; knight+antelope ×1 &nbsp;+&nbsp; dabbaba+three-leaper ×1 &nbsp;·&nbsp; Vivid palette</p>
+  <p>
+    A close cousin of the three bugs, bred to be a defect <em>farm</em>. The knight ×6
+    base builds big clean domains; the two minority long-reach compounds —
+    <strong>knight+antelope</strong> (reach 4) and <strong>dabbaba+three-leaper</strong>
+    (reach 3) — reach deep inside those domains and along their walls to seed an unusually
+    wide variety of defects. And because the solve reorganizes at every scale, each extent
+    is a different field — the <a href="../ideas.md">deterministic nesting</a> means the
+    same critters are present at all of them, just shrunk.
+  </p>
+
+  <p>The same roster at four extents — each a wholly different composition:</p>
+  <div class="thumbs">
+    <figure><img src="img/d6-e200.png" alt="D6 at extent 200: dense radial turbulence with totem-like spires."><figcaption>extent 200</figcaption></figure>
+    <figure><img src="img/d6-field.png" alt="D6 at extent 300: ornate radial sectors around a central knot."><figcaption>extent 300</figcaption></figure>
+    <figure><img src="img/d6-e500.png" alt="D6 at extent 500: a striped pyramid and bold wedges around the core."><figcaption>extent 500</figcaption></figure>
+    <figure><img src="img/d6-e1000.png" alt="D6 at extent 1000: a vast dense circuit-board of color."><figcaption>extent 1000</figcaption></figure>
+  </div>
+
+  <p>And the critters that turn up when you zoom in — a rough field guide:</p>
+  <div class="thumbs">
+    <figure><img src="img/d6-crosshair.png" alt="A small plus-shaped defect: four empty arms around a single stolen center cell, in a solid blue field."><figcaption><strong>Crosshair</strong> — 4 empty arms + a stolen center; the leaper's own symmetry, imprinted.</figcaption></figure>
+    <figure><img src="img/d6-caterpillar.png" alt="A solid body with a regular dotted fringe of cells down one edge, like legs."><figcaption><strong>Caterpillar</strong> — a solid body with a dotted leg-fringe.</figcaption></figure>
+    <figure><img src="img/d6-worm.png" alt="A thin horizontal bead-chain stretched along a domain wall."><figcaption><strong>Worm</strong> — a bead-chain stretched along a wall.</figcaption></figure>
+  </div>
+  <div class="thumbs">
+    <figure><img src="img/d6-bug.png" alt="A cluster of hollow empty-cell rings adrift in a clear cyan field."><figcaption><strong>Bug</strong> — a ring-cluster adrift in a clear domain.</figcaption></figure>
+    <figure><img src="img/d6-spines.png" alt="A magenta domain band with feathered, thorny black-cell edges."><figcaption><strong>Spiny border</strong> — the long-reach domain's feathered edge.</figcaption></figure>
+  </div>
+  <p class="muted">
+    These sort into two axes — <em>defect shapes</em> (blob island · ring-string ·
+    crosshair · caterpillar/worm · wall-bloom) and <em>boundary types</em> (clean sawtooth ·
+    interdigitated comb · spiny) — captured in the <a href="../ideas.md">taxonomy notes</a>.
+  </p>
+
+  <p class="live">
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:6,knight-antelope:1,dabbaba-threeleaper:1&amp;extent=200&amp;speed=8&amp;palette=0&amp;panel=closed">▶ live (200)</a> &nbsp;
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:6,knight-antelope:1,dabbaba-threeleaper:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live (500)</a> &nbsp;
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:6,knight-antelope:1,dabbaba-threeleaper:1&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (1000)</a>
+  </p>
+
+  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=knight:6,knight-antelope:1,dabbaba-threeleaper:1&amp;extent=600&amp;speed=0&amp;palette=0&amp;nopanel=1'
+node tools/shot.mjs "$URL" d6.png 4500 --size 1600,1600
+<span class="c"># the corner bug — a ring-cluster in clear cyan, far upper-right:</span>
+node tools/shot.mjs "$URL" bug.png 4500 --size 1600,1600 --clip 1408,16,184,152 --scale 7</pre>
+
   <footer>
     Patterns found by playing with the roster. See the pattern taxonomy in
     <a href="../ideas.md">ideas.md</a>. More finds get added here over time.

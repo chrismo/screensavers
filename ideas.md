@@ -173,3 +173,16 @@ sketch URL headlessly (used for verification) — the in-sketch download would b
 the user-facing version of the same capability.
 
 (Noted 2026-06-12.)
+
+## Interactive click-drag zoom (knights — tag: v3)
+
+In the sketch itself, **drag a rectangle to zoom into that region** (and a key to zoom
+back out). Right now finding the little defect "critters" (crosshairs, caterpillars,
+ring-strings, bugs) means eyeballing the full field and re-rendering a `--clip` with
+`tools/shot.mjs` to inspect — a drag-zoom would make that exploration live and immediate.
+Pairs naturally with **image export** above (zoom in, then save the crop) and the
+deterministic-nesting property (the same critters exist at every extent, just shrunk —
+so zoom is the right verb, not re-solve). Knight-specific UX for now, but the rubber-band
++ viewport-transform mechanism would generalize to any canvas sketch.
+
+(Noted 2026-06-13; explicitly deferred to a knights **v3** at the user's call.)
