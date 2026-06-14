@@ -476,12 +476,13 @@ node tools/shot.mjs "$URL" island.png 4000 --size 1600,1600 --clip 1300,1260,300
   <p>And the critters that turn up when you zoom in — a rough field guide:</p>
   <div class="thumbs">
     <figure><img src="img/d6-crosshair.png" alt="A small plus-shaped anomaly: four empty arms around a single stolen center cell, in a solid blue field."><figcaption><strong>Crosshair</strong> — 4 empty arms + a stolen center; the leaper's own symmetry, imprinted.</figcaption></figure>
-    <figure><img src="img/d6-caterpillar.png" alt="A solid body with a regular dotted fringe of cells down one edge, like legs."><figcaption><strong>Caterpillar</strong> — a solid body with a dotted leg-fringe.</figcaption></figure>
-    <figure><img src="img/d6-worm.png" alt="A thin horizontal bead-chain stretched along a domain wall."><figcaption><strong>Worm</strong> — a bead-chain stretched along a wall.</figcaption></figure>
+    <figure><img src="img/d6-caterpillar.png" alt="A diagonal chain of small empty-cell rings, each ring beaded with a blue and yellow speck at its center, strung wall-to-wall into a green field."><figcaption><strong>Caterpillar</strong> — a chain of empty-cell rings, each beaded with a blue/yellow center speck, strung along a domain wall…</figcaption></figure>
+    <figure><img src="img/d6-caterpillar-adrift.png" alt="A short diagonal run of the same ring-beads with blue and orange center specks, floating loose in a clear cyan domain."><figcaption>…or the same beads <strong>adrift</strong> in open domain, with no wall to string along.</figcaption></figure>
   </div>
   <div class="thumbs">
-    <figure><img src="img/d6-bug.png" alt="A cluster of hollow empty-cell rings adrift in a clear cyan field."><figcaption><strong>Bug</strong> — a ring-cluster adrift in a clear domain.</figcaption></figure>
+    <figure><img src="img/d6-worm.png" alt="A thin horizontal bead-chain stretched along a domain wall."><figcaption><strong>Worm</strong> — a bead-chain stretched along a wall.</figcaption></figure>
     <figure><img src="img/d6-spines.png" alt="A magenta domain band with feathered, thorny black-cell edges."><figcaption><strong>Spiny border</strong> — the long-reach domain's feathered edge.</figcaption></figure>
+    <figure><img src="img/d6-ornate-corner.png" alt="A field corner packed with detail: a blue domain meeting cyan and green, magenta busy regions, a yellow patch with a small ring-bead caterpillar, and a bead-worm running along the lower seam."><figcaption><strong>Ornate corner</strong> — several critters at once where domains pile up at the field's edge: a caterpillar threading the yellow, bead-worms along the seams.</figcaption></figure>
   </div>
   <p class="muted">
     These sort into two axes — <em>anomaly shapes</em> (blob island · ring-string ·
@@ -492,11 +493,12 @@ node tools/shot.mjs "$URL" island.png 4000 --size 1600,1600 --clip 1300,1260,300
   <pre><span class="c"># the critters each sit at a different extent — this helper swaps it per shot</span>
 G='knight:6,knight-antelope:1,dabbaba-threeleaper:1'
 shot() { node tools/shot.mjs "https://chrismo.github.io/screensavers/knights/?groups=$G&amp;extent=$1&amp;speed=0&amp;palette=0&amp;nopanel=1" "$2" "${@:3}"; }
-shot 100 caterpillar.png 3000 --size 1200,1200 --clip 248,820,150,250 --scale 6
-shot 200 crosshair.png   3000 --size 1400,1400 --clip 1010,968,190,165 --scale 6
-shot 300 worm.png        3500 --size 1400,1400 --clip 160,620,420,240 --scale 3.5
-shot 300 spines.png      3500 --size 1400,1400 --clip 850,650,430,340 --scale 3.3
-shot 600 bug.png         4500 --size 1600,1600 --clip 1408,16,184,152 --scale 7</pre>
+shot 200 caterpillar.png        3000 --size 1200,1200 --clip 230,763,200,200 --scale 5
+shot 600 caterpillar-adrift.png 5500 --size 1200,1200 --clip 1116,22,66,58   --scale 8
+shot 200 crosshair.png          3000 --size 1400,1400 --clip 1010,968,190,165 --scale 6
+shot 300 worm.png               3500 --size 1400,1400 --clip 192,708,175,55   --scale 7
+shot 300 spines.png             3500 --size 1400,1400 --clip 850,650,430,340  --scale 3.3
+shot 700 ornate-corner.png      5500 --size 1200,1200 --clip 1095,0,105,105   --scale 6</pre>
 
   <footer>
     Patterns found by playing with the roster. See the pattern taxonomy in
