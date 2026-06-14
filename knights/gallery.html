@@ -26,6 +26,17 @@
     .thumbs { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 1rem 0; }
     .thumbs figure { flex: 1 1 0; min-width: 160px; margin: 0; }
     .thumbs figcaption { font-size: 10px; }
+    .disclaimer { color: #8a8a8a; font-style: italic; font-size: 12.5px; border-left: 2px solid #333; padding-left: 0.85rem; margin: 1.25rem 0; }
+    .toc { border: 1px solid #222; border-radius: 4px; padding: 0.7rem 1rem; margin: 1.5rem 0; background: #161616; }
+    .toc strong { font-size: 11px; color: #aaa; letter-spacing: 0.06em; text-transform: uppercase; }
+    .toc ul { list-style: none; margin: 0.5rem 0 0; padding: 0; }
+    .toc li { padding: 0.12rem 0; }
+    .toc li.sub { padding-left: 1.2rem; font-size: 12.5px; }
+    .toc li.sub a { color: #88a; }
+    .linktable { border-collapse: collapse; margin: 1rem 0; font-size: 13px; }
+    .linktable td { padding: 0.2rem 0.9rem 0.2rem 0; vertical-align: top; }
+    .linktable td.rcp { color: #999; }
+    .linktable td.go { white-space: nowrap; }
     .combo { color: #ccc; }
     .live { display: inline-block; margin: 0.4rem 0; }
     ul.ex { list-style: none; padding: 0; margin: 1rem 0; }
@@ -46,8 +57,10 @@
     <a href="https://github.com/chrismo/screensavers/tree/main/knights">source</a>
   </div>
 
+  <p class="disclaimer">This article contains a large amount of Claude verbiage. I've edited it quite a bit and tried to remove the more obvious examples of Slop, but many of the descriptions of the visuals come from Claude which does a decent enough job.</p>
+
   <p>
-    <strong>Knights</strong> replays the <em>actual</em> turn-based solve of a
+    <strong>Knights</strong> replays the turn-based solve of a
     spiral knight-coloring — the phenomenon from Numberphile's
     <a href="https://youtu.be/UiX4CFIiegM">Red &amp; Black Knights</a> (Neil Sloane),
     with more in the <a href="https://www.youtube.com/watch?v=VgmDuBCayPw">Numberphile2
@@ -61,12 +74,15 @@
   </p>
 
   <p class="muted">
-    Each pattern below has a one-click <strong>see it live</strong> link (the solve
-    is deterministic, so the URL reproduces the exact field) and the
-    <a href="../tools/shot.mjs">tools/shot.mjs</a> commands to render and zoom it.
+    Each pattern below has one-click <strong>live</strong> links — the solve
+    is deterministic, so the URL reproduces the exact field. Where a detail needed a
+    crop, the <a href="../tools/shot.mjs">tools/shot.mjs</a> command (with its
+    coordinates) is included too.
   </p>
 
-  <h2>Basics — start here</h2>
+  <nav class="toc" id="toc"><strong>Contents</strong><ul></ul></nav>
+
+  <h2>Basics</h2>
   <p>
     The original result: just <strong>two knights</strong> taking turns, each
     avoiding the cells the other attacks. That alone produces the famous pattern —
@@ -80,10 +96,10 @@
     <img src="img/red-black.png" alt="Two-tone knight pattern: nested concentric square frames with cross-shaped channels radiating from the center.">
     <figcaption>The original two-color result. Out of one simple rule comes this
       nested, self-similar structure of concentric frames and channels radiating
-      from the center — and look closely: a few tiny island defects already appear.</figcaption>
+      from the center — and look closely: a few tiny island anomalies already appear.</figcaption>
   </figure>
   <p class="live">
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:2&amp;extent=500&amp;speed=8&amp;palette=3&amp;panel=closed">▶ see it live</a>
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:2&amp;extent=500&amp;speed=8&amp;palette=3&amp;panel=closed">live</a>
     <span class="muted">(plays the build; press <kbd>S</kbd> for the finished view)</span>
   </p>
 
@@ -96,7 +112,7 @@
       a very different character.</figcaption>
   </figure>
   <p class="live">
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:3&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:3&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a>
     <span class="muted">(plays the build; press <kbd>S</kbd> for the finished view)</span>
   </p>
 
@@ -107,15 +123,15 @@
     build (in every case each color is a <em>single</em> piece type, just like the
     videos):
   </p>
-  <ul class="ex">
-    <li>4 knights <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:4&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
-    <li>5 knights <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:5&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
-    <li>alfil + three-leaper <a href="https://chrismo.github.io/screensavers/knights/?groups=alfil:1,threeleaper:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
-    <li>knight + antelope <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:1,antelope:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
-    <li>knight + dabbaba + wazir ×2 <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:1,dabbaba:1,wazir:2&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
-    <li>knight + zebra <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:1,zebra:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
-    <li>wazir, ferz, wazir, ferz <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir:1,ferz:1,wazir:1,ferz:1&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
-  </ul>
+  <table class="linktable">
+    <tr><td>4 knights</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=knight:4&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></td></tr>
+    <tr><td>5 knights</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=knight:5&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></td></tr>
+    <tr><td>alfil + three-leaper</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=alfil:1,threeleaper:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></td></tr>
+    <tr><td>knight + antelope</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=knight:1,antelope:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></td></tr>
+    <tr><td>knight + dabbaba + wazir ×2</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=knight:1,dabbaba:1,wazir:2&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></td></tr>
+    <tr><td>knight + zebra</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=knight:1,zebra:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></td></tr>
+    <tr><td>wazir, ferz, wazir, ferz</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=wazir:1,ferz:1,wazir:1,ferz:1&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></td></tr>
+  </table>
 
   <h2>Compound pieces</h2>
   <p>
@@ -131,14 +147,14 @@
     fairy pieces</a> — the compound editor recreates them (then keeps going into
     unnamed unions like knight+antelope):
   </p>
-  <ul class="ex">
-    <li><strong>Mann</strong> <span class="rcp">/ commoner — wazir + ferz, the non-royal king</span> <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:5&amp;extent=100&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
-    <li><strong>Kirin</strong> <span class="rcp">— ferz + dabbaba (also preset 4, ×8)</span> <a href="https://chrismo.github.io/screensavers/knights/?groups=ferz-dabbaba:3&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
-    <li><strong>Phoenix</strong> <span class="rcp">— wazir + alfil</span> <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-alfil:5&amp;extent=200&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
-    <li><strong>Alibi</strong> <span class="rcp">— dabbaba + alfil</span> <a href="https://chrismo.github.io/screensavers/knights/?groups=dabbaba-alfil:3&amp;extent=600&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
-    <li><strong>Squirrel</strong> <span class="rcp">— knight + dabbaba + alfil, every cell two away</span> <a href="https://chrismo.github.io/screensavers/knights/?groups=knight-dabbaba-alfil:3&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></li>
-    <li><strong>Frog</strong> <span class="rcp">— ferz + three-leaper</span> <a href="https://chrismo.github.io/screensavers/knights/?groups=ferz-threeleaper:3&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (×3)</a> <a href="https://chrismo.github.io/screensavers/knights/?groups=ferz-threeleaper:5&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (×5)</a></li>
-  </ul>
+  <table class="linktable">
+    <tr><td><strong>Mann</strong></td><td class="rcp">/ commoner — wazir + ferz, the non-royal king</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:5&amp;extent=100&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></td></tr>
+    <tr><td><strong>Kirin</strong></td><td class="rcp">— ferz + dabbaba (also preset 4, ×8)</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=ferz-dabbaba:3&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></td></tr>
+    <tr><td><strong>Phoenix</strong></td><td class="rcp">— wazir + alfil</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-alfil:5&amp;extent=200&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></td></tr>
+    <tr><td><strong>Alibi</strong></td><td class="rcp">— dabbaba + alfil</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=dabbaba-alfil:3&amp;extent=600&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></td></tr>
+    <tr><td><strong>Squirrel</strong></td><td class="rcp">— knight + dabbaba + alfil, every cell two away</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=knight-dabbaba-alfil:3&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></td></tr>
+    <tr><td><strong>Frog</strong></td><td class="rcp">— ferz + three-leaper</td><td class="go"><a href="https://chrismo.github.io/screensavers/knights/?groups=ferz-threeleaper:3&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (×3)</a> <a href="https://chrismo.github.io/screensavers/knights/?groups=ferz-threeleaper:5&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (×5)</a></td></tr>
+  </table>
   <p class="muted">
     Rider-based compounds like the Amazon (queen + knight) aren't reachable — this
     sketch has only leapers, no sliding pieces. Beyond the named ones, mixing
@@ -146,16 +162,11 @@
   </p>
 
   <h2>Interesting combinations</h2>
-  <p class="muted">
-    Some combos earn a spot just by looking good — no defect to hunt, the whole field
-    is the point. These first two are inverses of each other: where one keeps the calm
-    in the center, the other keeps it at the edges.
-  </p>
 
   <h3>Rose window — a calm pinwheel in a busy frame</h3>
   <p class="combo">wazir+ferz ×4 &nbsp;+&nbsp; knight+antelope ×4 &nbsp;·&nbsp; Vivid palette</p>
   <p>
-    No defect to hunt here — just a favorite. Pairing four <em>king</em> colors
+    Pairing four <em>king</em> colors
     (wazir+ferz, which cover every near neighbor and so build big coherent domains) with
     four <em>knight+antelope</em> colors (two reaches at once, which can't settle) splits
     the field cleanly: the king colors win the calm geometric <strong>pinwheel</strong> at
@@ -168,25 +179,19 @@
     <figure>
       <img src="img/rose-window-300.png" alt="Extent 300: a bold pinwheel of flat triangular sectors fills the center, ringed by a dense border of tiny colored triangles.">
       <figcaption>Extent 300 — the pinwheel core dominates.</figcaption>
+      <a class="live" href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,knight-antelope:4&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">live (300)</a>
     </figure>
     <figure>
       <img src="img/rose-window-500.png" alt="Extent 500: a smaller central pinwheel inside a larger busy mosaic frame.">
       <figcaption>Extent 500 — core and frame in balance.</figcaption>
+      <a class="live" href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,knight-antelope:4&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live (500)</a>
     </figure>
     <figure>
       <img src="img/rose-window-1000.png" alt="Extent 1000: a small ordered pinwheel jewel at the center of a vast busy mosaic field.">
       <figcaption>Extent 1000 — a small jewel in a vast field.</figcaption>
+      <a class="live" href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,knight-antelope:4&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (1000)</a>
     </figure>
   </div>
-
-  <p class="live">
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,knight-antelope:4&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">▶ live (300)</a> &nbsp;
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,knight-antelope:4&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live (500)</a> &nbsp;
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,knight-antelope:4&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (1000)</a>
-  </p>
-
-  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,knight-antelope:4&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
-node tools/shot.mjs "$URL" rose.png 3500 --size 1000,1000   <span class="c"># swap extent=300 -&gt; 500 / 1000</span></pre>
 
   <h3>Chrysanthemum — a busy core in a calm frame</h3>
   <p class="combo">wazir+ferz ×4 &nbsp;+&nbsp; zebra ×4 &nbsp;·&nbsp; Vivid palette &nbsp;·&nbsp; extent 300</p>
@@ -218,12 +223,9 @@ node tools/shot.mjs "$URL" rose.png 3500 --size 1000,1000   <span class="c"># sw
   </div>
 
   <p class="live">
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,zebra:4&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,zebra:4&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">live</a>
     <span class="muted">(plays the build; press <kbd>S</kbd> for the static finished view)</span>
   </p>
-  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:4,zebra:4&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
-node tools/shot.mjs "$URL" chrysanthemum.png 3500 --size 1000,1000</pre>
-
   <h3>Muted &amp; vivid — dabbaba + ferz</h3>
   <p class="combo">dabbaba ×3 &nbsp;+&nbsp; ferz ×3 &nbsp;·&nbsp; Vivid palette</p>
   <p>
@@ -242,10 +244,12 @@ node tools/shot.mjs "$URL" chrysanthemum.png 3500 --size 1000,1000</pre>
     <figure>
       <img src="img/antique-300.png" alt="Extent 300: muted dusty pastel fields meeting along a central seam, with a turbulent core.">
       <figcaption>Extent 300 — the dusty core on its own.</figcaption>
+      <a class="live" href="https://chrismo.github.io/screensavers/knights/?groups=dabbaba:3,ferz:3&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">live (300)</a>
     </figure>
     <figure>
       <img src="img/antique-1000.png" alt="Extent 1000: the same core, now flanked by new layered and dripping color regions out toward the edges.">
       <figcaption>Extent 1000 — same core, new regions out past it.</figcaption>
+      <a class="live" href="https://chrismo.github.io/screensavers/knights/?groups=dabbaba:3,ferz:3&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (1000)</a>
     </figure>
   </div>
 
@@ -261,14 +265,7 @@ node tools/shot.mjs "$URL" chrysanthemum.png 3500 --size 1000,1000</pre>
     </figure>
   </div>
 
-  <p class="live">
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=dabbaba:3,ferz:3&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">▶ live (300)</a> &nbsp;
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=dabbaba:3,ferz:3&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (1000)</a>
-  </p>
-
   <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=dabbaba:3,ferz:3&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
-<span class="c"># render big (cells >= pixels) so the fine checker reads as smooth dusty tone, not moire</span>
-node tools/shot.mjs "$URL" antique.png 5500 --size 2000,2000
 <span class="c"># strata (right) and drips (lower-left):</span>
 node tools/shot.mjs "$URL" strata.png 5000 --size 1500,1500 --clip 1130,430,355,310 --scale 3
 node tools/shot.mjs "$URL" drips.png 5000 --size 1500,1500 --clip 320,950,430,420 --scale 3</pre>
@@ -281,7 +278,7 @@ node tools/shot.mjs "$URL" drips.png 5000 --size 1500,1500 --clip 320,950,430,42
       same — no dominance, no big domains, just the whole field woven into fine diagonal
       rainbow <strong>twill</strong>, like iridescent raw silk.</figcaption>
   </figure>
-  <p>It carries a couple of defects riding in the weave:</p>
+  <p>It carries a couple of anomalies riding in the weave:</p>
   <div class="thumbs">
     <figure>
       <img src="img/corduroy-island.png" alt="An orange blotch sitting at the seam where a cross-hatch region meets the diagonal twill.">
@@ -293,11 +290,10 @@ node tools/shot.mjs "$URL" drips.png 5000 --size 1500,1500 --clip 320,950,430,42
     </figure>
   </div>
   <p class="live">
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight-threeleaper:6&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight-threeleaper:6&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">live</a>
     <span class="muted">(plays the build; press <kbd>S</kbd> for the static finished view)</span>
   </p>
   <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=knight-threeleaper:6&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
-node tools/shot.mjs "$URL" corduroy.png 3500 --size 1000,1000
 <span class="c"># the island (top-left) and the red bar (lower-right):</span>
 node tools/shot.mjs "$URL" island.png 3500 --size 1500,1500 --clip 110,60,280,240 --scale 4
 node tools/shot.mjs "$URL" bar.png 3500 --size 1500,1500 --clip 1180,1185,280,255 --scale 4</pre>
@@ -313,12 +309,9 @@ node tools/shot.mjs "$URL" bar.png 3500 --size 1500,1500 --clip 1180,1185,280,25
       "many scales blended" counterpoint to the dichotomy pieces above.</figcaption>
   </figure>
   <p class="live">
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:2,knight-dabbaba:2,zebra-antelope:2&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:2,knight-dabbaba:2,zebra-antelope:2&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">live</a>
     <span class="muted">(plays the build; press <kbd>S</kbd> for the static finished view)</span>
   </p>
-  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:2,knight-dabbaba:2,zebra-antelope:2&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
-node tools/shot.mjs "$URL" carnival.png 3500 --size 1000,1000</pre>
-
   <h2>Notable patterns</h2>
 
   <h3>A dotted line — ferz + wazir</h3>
@@ -333,16 +326,16 @@ node tools/shot.mjs "$URL" carnival.png 3500 --size 1000,1000</pre>
   </figure>
 
   <p>
-    It's the same kind of defect as the three bugs below, but <em>lined up</em>: because
-    ferz is colorbound, the cells it gets blocked on all fall on the same sublattice, so
-    the empties string into a short row instead of scattering. Short-reach + colorbound
-    tends to make <em>linear</em> defects; the long-reach mixes below make <em>point</em>
-    ones.
+    Those empty cells are an <em>anomaly</em> — a spot the rule left blank and never came
+    back to fill. Because ferz is colorbound, the cells it gets blocked on all fall on the
+    same sublattice, so the empties line up into a short row instead of scattering.
+    Short-reach colorbound pieces tend to make these <em>linear</em> anomalies; longer-reach
+    pieces make scattered <em>point</em> ones instead.
   </p>
 
   <p class="live">
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=ferz:4,wazir:4&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
-    <span class="muted">(the defect is tiny at full zoom — render below to find it)</span>
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=ferz:4,wazir:4&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">live</a>
+    <span class="muted">(the anomaly is tiny at full zoom — render below to find it)</span>
   </p>
 
   <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=ferz:4,wazir:4&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
@@ -371,17 +364,11 @@ node tools/shot.mjs "$URL" dots.png 3500 --size 1500,1500 --clip 748,622,116,86 
   </figure>
 
   <p class="live">
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=alfil:4,wazir:4&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=alfil:4,wazir:4&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live</a>
     <span class="muted">(plays the build; press <kbd>S</kbd> for the static finished view)</span>
   </p>
 
-  <pre><span class="c"># set the URL once, then run a render below (swap host for http://localhost:8000 in dev)</span>
-URL='https://chrismo.github.io/screensavers/knights/?groups=alfil:4,wazir:4&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
-
-<span class="c"># the whole field — render big (cells >= pixels) so the fine alfil checker</span>
-<span class="c"># doesn't moire; the browser downscales it smoothly for display</span>
-node tools/shot.mjs "$URL" pyramids.png 5500 --size 2000,2000
-
+  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=alfil:4,wazir:4&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
 <span class="c"># the two biggest peaks, bottom-left of the range</span>
 node tools/shot.mjs "$URL" zoom.png 5500 --size 2000,2000 --clip 160,1560,560,400 --scale 1.6</pre>
 
@@ -397,8 +384,8 @@ node tools/shot.mjs "$URL" zoom.png 5500 --size 2000,2000 --clip 160,1560,560,40
   </figure>
 
   <figure>
-    <img src="img/three-bugs-zoom.png" alt="Zoom on the red domain: three small speckled 'bug' defects strung along the diagonal, plus the black border to the yellow region.">
-    <figcaption>Zoom on the red domain. Three tiny <strong>"bug" defects</strong>
+    <img src="img/three-bugs-zoom.png" alt="Zoom on the red domain: three small speckled 'bug' anomalies strung along the diagonal, plus the black border to the yellow region.">
+    <figcaption>Zoom on the red domain. Three tiny <strong>"bug" anomalies</strong>
       sit along its main diagonal — knots of empty (black) cells speckled with a few
       cells other colors stole (note the recurring green Knight pixel). The corner
       bug perches on the black "domain wall" — a 1-cell-wide line of empty cells
@@ -408,23 +395,18 @@ node tools/shot.mjs "$URL" zoom.png 5500 --size 2000,2000 --clip 160,1560,560,40
   <p>
     These only appear once <strong>long-reach compound pieces</strong> are in the
     roster: a single far-away piece (antelope reach-4, three-leaper reach-3) can
-    veto one specific cell deep inside another color's territory, seeding a defect.
+    veto one specific cell deep inside another color's territory, seeding an anomaly.
     Two kinds show up — <em>interior islands</em> (specks deep in a solid field) and
-    <em>domain-wall</em> defects (blooms along the borders). Plain short-reach
+    <em>domain-wall</em> anomalies (blooms along the borders). Plain short-reach
     knights can't reach in like this, so you mostly see clean domains instead.
   </p>
 
   <p class="live">
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:4,knight-antelope:3,dabbaba-threeleaper:1&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:4,knight-antelope:3,dabbaba-threeleaper:1&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live</a>
     <span class="muted">(plays the build at full tilt; press <kbd>S</kbd> for the static finished view)</span>
   </p>
 
-  <pre><span class="c"># set the URL once, then run any render below (swap host for http://localhost:8000 in dev)</span>
-URL='https://chrismo.github.io/screensavers/knights/?groups=knight:4,knight-antelope:3,dabbaba-threeleaper:1&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
-
-<span class="c"># the whole finished pattern</span>
-node tools/shot.mjs "$URL" pattern.png 2800 --size 1100,1100
-
+  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=knight:4,knight-antelope:3,dabbaba-threeleaper:1&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
 <span class="c"># the three bugs + red/yellow corner (they sit at world (752,756) -> (810,810) -> (848,848))</span>
 node tools/shot.mjs "$URL" bugs.png 3500 --size 6000,6000 --clip 5190,390,420,420 --scale 3</pre>
 
@@ -436,10 +418,10 @@ node tools/shot.mjs "$URL" bugs.png 3500 --size 6000,6000 --clip 5190,390,420,42
     <figcaption>Seven knights plus a <em>single</em> bare antelope. The antelope (reach 4)
       can't hold territory of its own, so it scrambles into a turbulent bloom at the
       center while the knights take clean radial sectors. But its long reach still
-      vetoes lone cells deep inside those sectors — seeding defects.</figcaption>
+      vetoes lone cells deep inside those sectors — seeding anomalies.</figcaption>
   </figure>
 
-  <p>The same defect species turns up twice — and lined up the same way:</p>
+  <p>The same anomaly species turns up twice — and lined up the same way:</p>
   <div class="thumbs">
     <figure>
       <img src="img/d2-ringstring.png" alt="A clean diagonal string of hollow empty-cell rings descending across a solid red domain.">
@@ -452,49 +434,48 @@ node tools/shot.mjs "$URL" bugs.png 3500 --size 6000,6000 --clip 5190,390,420,42
   </div>
 
   <p>
-    The striking part: <strong>every</strong> defect the antelope seeds runs along the
+    The striking part: <strong>every</strong> anomaly the antelope seeds runs along the
     <em>same diagonal</em> — its own [4,3] move-line. So a lone saboteur gives the whole
     field one consistent <strong>grain</strong>. It's the same idea as the crosshair
-    defect (a piece's <em>symmetry</em> printed as a shape); here the piece's
-    <em>reach direction</em> is printed as the <em>orientation</em> of every defect. The
+    anomaly (a piece's <em>symmetry</em> printed as a shape); here the piece's
+    <em>reach direction</em> is printed as the <em>orientation</em> of every anomaly. The
     menagerie below uses <em>two</em> different long pieces — two crossing grains — which
     is why its critters look so much more tangled and varied.
   </p>
 
   <p class="live">
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:7,antelope:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">▶ see it live</a>
+    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:7,antelope:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a>
     <span class="muted">(plays the build; press <kbd>S</kbd> for the static finished view)</span>
   </p>
 
   <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=knight:7,antelope:1&amp;extent=500&amp;speed=0&amp;palette=0&amp;nopanel=1'
-node tools/shot.mjs "$URL" d2.png 4000 --size 1000,1000
 <span class="c"># the ring-string (red, upper-right) and the island (green, lower-right):</span>
 node tools/shot.mjs "$URL" rings.png 4000 --size 1600,1600 --clip 1240,55,350,300 --scale 4
 node tools/shot.mjs "$URL" island.png 4000 --size 1600,1600 --clip 1300,1260,300,300 --scale 4</pre>
 
-  <h3>The D6 menagerie — one roster, a whole zoo of defects</h3>
+  <h3>The D6 menagerie — one roster, a whole zoo of anomalies</h3>
   <p class="combo">knight ×6 &nbsp;+&nbsp; knight+antelope ×1 &nbsp;+&nbsp; dabbaba+three-leaper ×1 &nbsp;·&nbsp; Vivid palette</p>
   <p>
-    A close cousin of the three bugs, bred to be a defect <em>farm</em>. The knight ×6
+    A close cousin of the three bugs, bred to be an anomaly <em>farm</em>. The knight ×6
     base builds big clean domains; the two minority long-reach compounds —
     <strong>knight+antelope</strong> (reach 4) and <strong>dabbaba+three-leaper</strong>
     (reach 3) — reach deep inside those domains and along their walls to seed an unusually
-    wide variety of defects. And because the solve reorganizes at every scale, each extent
+    wide variety of anomalies. And because the solve reorganizes at every scale, each extent
     is a different field — the <a href="../ideas.md">deterministic nesting</a> means the
     same critters are present at all of them, just shrunk.
   </p>
 
   <p>The same roster at four extents — each a wholly different composition:</p>
   <div class="thumbs">
-    <figure><img src="img/d6-e200.png" alt="D6 at extent 200: dense radial turbulence with totem-like spires."><figcaption>extent 200</figcaption></figure>
-    <figure><img src="img/d6-field.png" alt="D6 at extent 300: ornate radial sectors around a central knot."><figcaption>extent 300</figcaption></figure>
-    <figure><img src="img/d6-e500.png" alt="D6 at extent 500: a striped pyramid and bold wedges around the core."><figcaption>extent 500</figcaption></figure>
-    <figure><img src="img/d6-e1000.png" alt="D6 at extent 1000: a vast dense circuit-board of color."><figcaption>extent 1000</figcaption></figure>
+    <figure><img src="img/d6-e200.png" alt="D6 at extent 200: dense radial turbulence with totem-like spires."><figcaption>extent 200</figcaption><a class="live" href="https://chrismo.github.io/screensavers/knights/?groups=knight:6,knight-antelope:1,dabbaba-threeleaper:1&amp;extent=200&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></figure>
+    <figure><img src="img/d6-field.png" alt="D6 at extent 300: ornate radial sectors around a central knot."><figcaption>extent 300</figcaption><a class="live" href="https://chrismo.github.io/screensavers/knights/?groups=knight:6,knight-antelope:1,dabbaba-threeleaper:1&amp;extent=300&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></figure>
+    <figure><img src="img/d6-e500.png" alt="D6 at extent 500: a striped pyramid and bold wedges around the core."><figcaption>extent 500</figcaption><a class="live" href="https://chrismo.github.io/screensavers/knights/?groups=knight:6,knight-antelope:1,dabbaba-threeleaper:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></figure>
+    <figure><img src="img/d6-e1000.png" alt="D6 at extent 1000: a vast dense circuit-board of color."><figcaption>extent 1000</figcaption><a class="live" href="https://chrismo.github.io/screensavers/knights/?groups=knight:6,knight-antelope:1,dabbaba-threeleaper:1&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live</a></figure>
   </div>
 
   <p>And the critters that turn up when you zoom in — a rough field guide:</p>
   <div class="thumbs">
-    <figure><img src="img/d6-crosshair.png" alt="A small plus-shaped defect: four empty arms around a single stolen center cell, in a solid blue field."><figcaption><strong>Crosshair</strong> — 4 empty arms + a stolen center; the leaper's own symmetry, imprinted.</figcaption></figure>
+    <figure><img src="img/d6-crosshair.png" alt="A small plus-shaped anomaly: four empty arms around a single stolen center cell, in a solid blue field."><figcaption><strong>Crosshair</strong> — 4 empty arms + a stolen center; the leaper's own symmetry, imprinted.</figcaption></figure>
     <figure><img src="img/d6-caterpillar.png" alt="A solid body with a regular dotted fringe of cells down one edge, like legs."><figcaption><strong>Caterpillar</strong> — a solid body with a dotted leg-fringe.</figcaption></figure>
     <figure><img src="img/d6-worm.png" alt="A thin horizontal bead-chain stretched along a domain wall."><figcaption><strong>Worm</strong> — a bead-chain stretched along a wall.</figcaption></figure>
   </div>
@@ -503,21 +484,19 @@ node tools/shot.mjs "$URL" island.png 4000 --size 1600,1600 --clip 1300,1260,300
     <figure><img src="img/d6-spines.png" alt="A magenta domain band with feathered, thorny black-cell edges."><figcaption><strong>Spiny border</strong> — the long-reach domain's feathered edge.</figcaption></figure>
   </div>
   <p class="muted">
-    These sort into two axes — <em>defect shapes</em> (blob island · ring-string ·
+    These sort into two axes — <em>anomaly shapes</em> (blob island · ring-string ·
     crosshair · caterpillar/worm · wall-bloom) and <em>boundary types</em> (clean sawtooth ·
     interdigitated comb · spiny) — captured in the <a href="../ideas.md">taxonomy notes</a>.
   </p>
 
-  <p class="live">
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:6,knight-antelope:1,dabbaba-threeleaper:1&amp;extent=200&amp;speed=8&amp;palette=0&amp;panel=closed">▶ live (200)</a> &nbsp;
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:6,knight-antelope:1,dabbaba-threeleaper:1&amp;extent=500&amp;speed=8&amp;palette=0&amp;panel=closed">live (500)</a> &nbsp;
-    <a href="https://chrismo.github.io/screensavers/knights/?groups=knight:6,knight-antelope:1,dabbaba-threeleaper:1&amp;extent=1000&amp;speed=8&amp;palette=0&amp;panel=closed">live (1000)</a>
-  </p>
-
-  <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=knight:6,knight-antelope:1,dabbaba-threeleaper:1&amp;extent=600&amp;speed=0&amp;palette=0&amp;nopanel=1'
-node tools/shot.mjs "$URL" d6.png 4500 --size 1600,1600
-<span class="c"># the corner bug — a ring-cluster in clear cyan, far upper-right:</span>
-node tools/shot.mjs "$URL" bug.png 4500 --size 1600,1600 --clip 1408,16,184,152 --scale 7</pre>
+  <pre><span class="c"># the critters each sit at a different extent — this helper swaps it per shot</span>
+G='knight:6,knight-antelope:1,dabbaba-threeleaper:1'
+shot() { node tools/shot.mjs "https://chrismo.github.io/screensavers/knights/?groups=$G&amp;extent=$1&amp;speed=0&amp;palette=0&amp;nopanel=1" "$2" "${@:3}"; }
+shot 100 caterpillar.png 3000 --size 1200,1200 --clip 248,820,150,250 --scale 6
+shot 200 crosshair.png   3000 --size 1400,1400 --clip 1010,968,190,165 --scale 6
+shot 300 worm.png        3500 --size 1400,1400 --clip 160,620,420,240 --scale 3.5
+shot 300 spines.png      3500 --size 1400,1400 --clip 850,650,430,340 --scale 3.3
+shot 600 bug.png         4500 --size 1600,1600 --clip 1408,16,184,152 --scale 7</pre>
 
   <footer>
     Patterns found by playing with the roster. See the pattern taxonomy in
@@ -529,10 +508,26 @@ node tools/shot.mjs "$URL" bug.png 4500 --size 1600,1600 --clip 1408,16,184,152 
   <p class="combo"><combo> · <palette></p>
   <figure><img src="img/<file>.png" alt="..."><figcaption>...</figcaption></figure>
   <p>...what's interesting and why...</p>
-  <p class="live"><a href="https://chrismo.github.io/screensavers/knights/?groups=...&panel=closed">▶ see it live</a></p>
+  <p class="live"><a href="https://chrismo.github.io/screensavers/knights/?groups=...&panel=closed">live</a></p>
   <pre>URL='...'
-  node tools/shot.mjs "$URL" out.png 2800
-  # zoom: node tools/shot.mjs "$URL" zoom.png 3500 --size 6000,6000 --clip x,y,w,h --scale 3</pre>
+  # only for zooms/crops — full images come straight from the live link
+  node tools/shot.mjs "$URL" zoom.png 3500 --size 6000,6000 --clip x,y,w,h --scale 3</pre>
   -->
+  <script>
+    var toc = document.querySelector('#toc ul');
+    document.querySelectorAll('h2, h3').forEach(function (h) {
+      var name = h.textContent.split('—')[0].trim();
+      var id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      h.id = id;
+      var li = document.createElement('li');
+      if (h.tagName === 'H3') li.className = 'sub';
+      li.innerHTML = '<a href="#' + id + '">' + name + '</a>';
+      toc.appendChild(li);
+    });
+    // open every link in a new tab — except the in-page table-of-contents jumps
+    document.querySelectorAll('a[href]').forEach(function (a) {
+      if (a.getAttribute('href').charAt(0) !== '#') { a.target = '_blank'; a.rel = 'noopener'; }
+    });
+  </script>
 </body>
 </html>
