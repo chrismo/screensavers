@@ -377,8 +377,9 @@ node tools/shot.mjs "$URL" dots.png 3500 --size 1500,1500 --clip 748,622,116,86 
   <pre><span class="c"># set the URL once, then run a render below (swap host for http://localhost:8000 in dev)</span>
 URL='https://chrismo.github.io/screensavers/knights/?groups=alfil:4,wazir:4&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
 
-<span class="c"># the whole field — the giant pyramid is obvious</span>
-node tools/shot.mjs "$URL" pyramids.png 5000 --size 1100,1100
+<span class="c"># the whole field — render big (cells >= pixels) so the fine alfil checker</span>
+<span class="c"># doesn't moire; the browser downscales it smoothly for display</span>
+node tools/shot.mjs "$URL" pyramids.png 5500 --size 2000,2000
 
 <span class="c"># the two small pyramids at the left of the range</span>
 node tools/shot.mjs "$URL" zoom.png 5000 --size 1500,1500 --clip 400,950,310,200 --scale 5</pre>
