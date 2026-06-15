@@ -1403,6 +1403,9 @@ function copyShareUrl() {
   if (cyclePresets) q.set('cycle', '1');
   if (!details) q.set('details', '0');
   if (spiralStyle !== 'spiral') q.set('spiral', spiralStyle);
+  // TODO: reconsider forcing nopanel=1 here. It's the only easy way to set it,
+  // yet it's rarely wanted — a shared/copied URL almost always wants the panel
+  // visible. Consider dropping this (and gating nopanel behind an explicit opt-in).
   q.set('nopanel', '1');
   const url = `${location.origin}${location.pathname}?${q.toString()}`;
   const done = (msg) => { window.flashToast?.(msg); const d = document.getElementById('copy-desc'); if (d) { const t = d.textContent; d.textContent = msg; setTimeout(() => (d.textContent = t), 1200); } };
