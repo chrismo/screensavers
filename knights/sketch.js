@@ -137,12 +137,12 @@ function leaperOffsets(piece) {
 }
 
 // Bump the MINOR on each change so the panel shows when a new build has loaded.
-const VERSION = '2.23';
+const VERSION = '2.24';
 
 // =======================================================================
 // Live params (URL-overridable, panel-tunable)
 // =======================================================================
-let extent = 24;         // S: max spiral shell ≈ half the grid side (a rung on EXTENT_STEPS)
+let extent = 400;        // S: max spiral shell ≈ half the grid side (a rung on EXTENT_STEPS)
 // Speed is a discrete LEVEL (what the panel gauge and the URL store), mapped to an
 // actual placements/sec rate via a geometric ladder. Level 0 = static; 1..8 index
 // SPEED_RATES. The fractional slow rates never surface in the panel or the URL.
@@ -150,7 +150,7 @@ const SPEED_RATES = [1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8]; // placements/sec
 let speedLevel = 3;      // 0 = static; default 3 → 1/4 per sec (the ramp accelerates from here)
 let lastSpeedLevel = 3;  // remembered animated level, so the static toggle can restore it
 let speed = SPEED_RATES[speedLevel - 1]; // derived rate the pacing math uses; 0 when static
-let paletteIdx = 3;
+let paletteIdx = 0;
 let startFrac = 0;       // initial timeline fraction 0..1 (URL `start`)
 let cyclePresets = false;
 let details = true;      // narration overlays on? off = pure screensaver (field + grid only)
@@ -177,8 +177,12 @@ const FADE_SEC = 1.2;
 const EXTENT_STEPS = [24, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
 const LANDING_DUR = 0.12;    // seconds for the cell-drop pop — constant, NOT tied to speed
 
+// TODO: the cold-load defaults (groups@~L85, extent@~L145, paletteIdx@~L153) are
+// hand-kept in sync with presets[0] below — change one, change both. Ideally the
+// startup state should just initialize FROM presets[0] (which would need an
+// `extent` field on each preset). Not worth fixing right now.
 const presets = [
-  { name: 'Red & Black',  groups: [{ pieces: ['knight'], count: 2 }], paletteIdx: 3 },
+  { name: 'Red & Black',  groups: [{ pieces: ['knight'], count: 2 }], paletteIdx: 0 },
   { name: 'Knights ×3',   groups: [{ pieces: ['knight'], count: 3 }], paletteIdx: 0 },
   { name: 'Knight+Zebra', groups: [{ pieces: ['knight'], count: 2 }, { pieces: ['zebra'], count: 1 }], paletteIdx: 0 },
   { name: 'Ferz+Dab ×8',  groups: [{ pieces: ['ferz', 'dabbaba'], count: 8 }], paletteIdx: 0 },
