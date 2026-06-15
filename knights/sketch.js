@@ -82,7 +82,7 @@ function genColors(scheme, N) {
 
 // A group is { pieces: [leaper, …], count }: its colors move as the UNION of the
 // listed leapers (a compound piece). Total colors = sum of counts.
-let groups = [{ pieces: ['knight'], count: 3 }];
+let groups = [{ pieces: ['knight'], count: 2 }];
 function totalColors() { let s = 0; for (const g of groups) s += g.count; return s; }
 function sortPieces(ps) {
   const uniq = [...new Set(ps)].filter((p) => PIECES[p]);
@@ -150,7 +150,7 @@ const SPEED_RATES = [1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8]; // placements/sec
 let speedLevel = 3;      // 0 = static; default 3 → 1/4 per sec (the ramp accelerates from here)
 let lastSpeedLevel = 3;  // remembered animated level, so the static toggle can restore it
 let speed = SPEED_RATES[speedLevel - 1]; // derived rate the pacing math uses; 0 when static
-let paletteIdx = 0;
+let paletteIdx = 3;
 let startFrac = 0;       // initial timeline fraction 0..1 (URL `start`)
 let cyclePresets = false;
 let details = true;      // narration overlays on? off = pure screensaver (field + grid only)
@@ -178,8 +178,8 @@ const EXTENT_STEPS = [24, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
 const LANDING_DUR = 0.12;    // seconds for the cell-drop pop — constant, NOT tied to speed
 
 const presets = [
-  { name: 'Knights ×3',   groups: [{ pieces: ['knight'], count: 3 }], paletteIdx: 0 },
   { name: 'Red & Black',  groups: [{ pieces: ['knight'], count: 2 }], paletteIdx: 3 },
+  { name: 'Knights ×3',   groups: [{ pieces: ['knight'], count: 3 }], paletteIdx: 0 },
   { name: 'Knight+Zebra', groups: [{ pieces: ['knight'], count: 2 }, { pieces: ['zebra'], count: 1 }], paletteIdx: 0 },
   { name: 'Ferz+Dab ×8',  groups: [{ pieces: ['ferz', 'dabbaba'], count: 8 }], paletteIdx: 0 },
   { name: 'Wa+Fe+Al',     groups: [{ pieces: ['wazir'], count: 1 }, { pieces: ['ferz'], count: 1 }, { pieces: ['alfil'], count: 1 }], paletteIdx: 1 },
