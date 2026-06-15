@@ -968,6 +968,8 @@ const PANEL_CSS = `
   #drawer-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 3px; }
   #drawer-content h1 { font-size: 14px; font-weight: 500; letter-spacing: 0.04em; margin: 0 0 1rem; color: #fff; }
   #drawer-content h1 small { font-weight: 400; color: #888; margin-left: 0.4em; font-size: 11px; }
+  #drawer-content h1 small a { color: #9cf; text-decoration: none; }
+  #drawer-content h1 small a:hover { color: #fff; }
   #drawer-content h2 { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em;
     margin: 1.4rem 0 0.5rem; color: #888; }
   .h2-aside { text-transform: none; letter-spacing: 0; color: #777; margin-left: 0.5rem; font-weight: 400; }
@@ -1006,8 +1008,6 @@ const PANEL_CSS = `
     padding: 0.28rem 0.42rem; border-radius: 3px; min-width: 1rem; text-align: center; }
   .preset-pills .pill.active { background: rgba(156,204,255,0.22); color: #9cf; }
   .legend { display: grid; grid-template-columns: auto 1fr; gap: 0.45rem 0.85rem; align-items: center; }
-  .about { margin-top: 1.1rem; padding-top: 0.9rem; border-top: 1px solid rgba(255,255,255,0.07); font-size: 11px; }
-  .about a { color: #9cf; text-decoration: none; } .about a:hover { color: #fff; }
   .kbd { font-family: inherit; background: rgba(255,255,255,0.07); padding: 0.35rem 0.6rem; border-radius: 3px;
     font-size: 12px; color: #ccc; text-align: center; white-space: nowrap; line-height: 1; }
   .kbd-desc { color: #aaa; font-size: 11px; }
@@ -1034,7 +1034,7 @@ const PANEL_HTML = `
   <div id="drawer">
     <button id="drawer-toggle" tabindex="-1" aria-label="Toggle controls"></button>
     <div id="drawer-content">
-      <h1>Knights <small>how it's built · v${VERSION}</small></h1>
+      <h1>Knights <small><a href="gallery.html" target="_blank">gallery →</a> · v${VERSION}</small></h1>
       <h2>pieces <span id="v-total" class="h2-aside"></span></h2>
       <div id="groups"></div>
       <button class="addgrp" data-action="grp-add">+ add color group</button>
@@ -1059,7 +1059,6 @@ const PANEL_HTML = `
         <button class="kbd" data-action="fullscreen">F</button><div class="kbd-desc">fullscreen</div>
         <button class="kbd" data-action="hide">H</button><div class="kbd-desc">hide / show panel</div>
       </div>
-      <div class="about"><a href="gallery.html" target="_blank">about &amp; gallery →</a></div>
     </div>
   </div>
 `;
