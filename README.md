@@ -1,10 +1,11 @@
 # screensavers
 
-Interactive p5.js / WebGL screensaver-style sketches by chrismo. Each
-lives in its own subdirectory and is served as a static page from
-GitHub Pages at `https://chrismo.github.io/screensavers/<name>/`. The
-canonical autoplay form for screensaver use adds `?nopanel=1&lerp=1`
-(or whatever URL params the sketch supports).
+Interactive, screensaver-style sketches by chrismo (p5.js, WebGL, and
+plain Canvas2D). Each lives in its own subdirectory and is served as a
+static page from GitHub Pages at
+`https://chrismo.github.io/screensavers/<name>/`. The canonical autoplay
+form for screensaver use adds `?nopanel=1` (plus whatever URL params the
+sketch supports, e.g. `&lerp=1` for petri-dish).
 
 ## Sketches
 
@@ -12,10 +13,11 @@ canonical autoplay form for screensaver use adds `?nopanel=1&lerp=1`
   simulation. See [petri-dish/README.md](petri-dish/README.md) for
   controls, presets, and supported URL params.
   Live: https://chrismo.github.io/screensavers/petri-dish/
-- [knights/](knights/) — "how it's built": replays the actual turn-based
-  knight-coloring solve, narrating each placement decision while zoomed in, then
-  accelerating and interleaving to reveal the emergent large-scale pattern (after
-  Numberphile's "Red & Black Knights"). See [knights/README.md](knights/README.md)
+- [knights/](knights/) — an interactive sandbox for the *Red & Black Knights*
+  spiral graph-coloring (after Numberphile): replays the actual turn-based solve,
+  narrating each placement decision while zoomed in, then accelerating and
+  interleaving to reveal the emergent large-scale pattern — and lets you swap in
+  any roster of leaper pieces. Canvas2D. See [knights/README.md](knights/README.md)
   for controls and URL params.
   Live: https://chrismo.github.io/screensavers/knights/
 

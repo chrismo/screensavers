@@ -1,14 +1,19 @@
-# knights — how it's built
+# knights
 
-Replays the **actual turn-based placement** of the knights spiral-coloring,
-narrating *why* each cell gets its color, then accelerating and zooming out to
-reveal the emergent large-scale pattern.
+An interactive sandbox for the **Red & Black Knights** spiral graph-coloring.
+It replays the **actual turn-based placement** of the solve, narrating *why*
+each cell gets its color, then accelerates and zooms out to reveal the emergent
+large-scale pattern — and lets you swap in any roster of leaper pieces to spin
+up your own.
 
 The rule (from Numberphile's "Red & Black Knights"): cells of a square spiral
 are claimed by K colors of pieces taking turns. On a color's turn it grabs the
 lowest-numbered cell that is **not occupied** and **not attacked by any other
 color** (same-color attacks are allowed — that asymmetry is what breeds the
 large-scale pattern).
+
+The default landing is the two-knight coloring from the video (`knight:2`, Vivid
+palette, extent 400); add more pieces and groups from the panel to go further.
 
 It **narrates** that decision and then lets it run:
 
@@ -62,10 +67,11 @@ each group's actual colors.
   `-` (a compound leaper), count after `:`, groups separated by `,`. (`-` not
   `+`: in a query string `+` decodes to a space.) Roster: `knight`, `wazir`,
   `ferz`, `dabbaba`, `alfil`, `threeleaper`, `zebra`, `antelope`.
-- `extent=24` — spiral half-extent S (grid is (2S+1)²). Steps on a ladder
-  (`24 · 100 · 200 · … · 1000`); the panel arrows / `[` `]` move between rungs and
-  a URL value snaps to the nearest. Small (the `24` default) keeps the solve
-  readable; bigger plays longer before it fills.
+- `extent=400` — spiral half-extent S (grid is (2S+1)²). Steps on a ladder
+  (`24 · 100 · 200 · … · 1000`, default `400`); the panel arrows / `[` `]` move
+  between rungs and a URL value snaps to the nearest. The small `24` rung keeps
+  the solve readable for watching the narration; bigger plays longer and shows
+  more of the emergent pattern before it fills.
 - `speed=3` — overall tempo as a **level** `0`–`8` (shown in the panel as the
   level number; default `3`). Higher = faster; it scales both the narrated crawl
   and the rate the ramp accelerates from. The levels are a geometric ladder
@@ -88,9 +94,9 @@ Example: a 6-color Ferz+Dabbaba compound, mid-run —
 
 ## Notes
 
-This Canvas2D "how it's built" view replaced an earlier WebGL sketch that swept
-the finished pattern — the per-cursor construction-order reveal shows dynamics
-the uniform sweep averaged away. See [`spec.md`](spec.md) for the design
-decisions and migration history. Generic panel/page chrome is shared with the
+This Canvas2D view replaced an earlier WebGL sketch that swept the finished
+pattern — the per-cursor construction-order reveal shows dynamics the uniform
+sweep averaged away. See [`spec.md`](spec.md) for the design decisions and
+migration history. Generic panel/page chrome is shared with the
 rest of the gallery via `../panel.js` and `../chrome.js`; the knights-specific
 solver and piece math live inline here.
