@@ -150,10 +150,10 @@ if (evalCode) {
   await sleep(120); // let one frame draw after the eval
 }
 
-// Hide transient sketch chrome (the fading "F fullscreen" hint / toast from
-// chrome.js) so a crop near a screen edge doesn't capture it mid-fade.
+// Hide sketch chrome (the fading "F fullscreen" hint / toast from chrome.js,
+// and knights' #kn-config roster label) so a crop near a screen edge stays clean.
 await send('Runtime.evaluate', {
-  expression: "[].forEach.call(document.querySelectorAll('.ss-hint,.ss-toast'),function(e){e.style.display='none'})",
+  expression: "[].forEach.call(document.querySelectorAll('.ss-hint,.ss-toast,#kn-config'),function(e){e.style.display='none'})",
 });
 
 let clip;
