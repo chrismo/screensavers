@@ -137,7 +137,7 @@ function leaperOffsets(piece) {
 }
 
 // Bump the MINOR on each change so the panel shows when a new build has loaded.
-const VERSION = '2.0';
+const VERSION = '2.1';
 
 // =======================================================================
 // Live params (URL-overridable, panel-tunable)
