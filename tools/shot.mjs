@@ -150,6 +150,12 @@ if (evalCode) {
   await sleep(120); // let one frame draw after the eval
 }
 
+// Hide transient sketch chrome (the fading "F fullscreen" hint / toast from
+// chrome.js) so a crop near a screen edge doesn't capture it mid-fade.
+await send('Runtime.evaluate', {
+  expression: "[].forEach.call(document.querySelectorAll('.ss-hint,.ss-toast'),function(e){e.style.display='none'})",
+});
+
 let clip;
 if (CLIP) {
   const [x, y, w, h] = CLIP.split(',').map(Number);

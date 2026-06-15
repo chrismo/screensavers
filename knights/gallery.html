@@ -267,8 +267,8 @@
 
   <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=dabbaba:3,ferz:3&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
 <span class="c"># strata (right) and drips (lower-left):</span>
-node tools/shot.mjs "$URL" strata.png 5000 --size 1500,1413 --clip 1130,430,355,310 --scale 3
-node tools/shot.mjs "$URL" drips.png 5000 --size 1500,1413 --clip 320,950,430,420 --scale 3</pre>
+node tools/shot.mjs "$URL" strata.png 5000 --size 1500,1500 --clip 1145,466,355,310 --scale 3
+node tools/shot.mjs "$URL" drips.png 5000 --size 1500,1500 --clip 307,1021,430,420 --scale 3</pre>
 
   <h3>Rainbow corduroy — knight + three-leaper</h3>
   <p class="combo">knight+three-leaper ×6 &nbsp;·&nbsp; Vivid palette &nbsp;·&nbsp; extent 300</p>
@@ -295,8 +295,8 @@ node tools/shot.mjs "$URL" drips.png 5000 --size 1500,1413 --clip 320,950,430,42
   </p>
   <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=knight-threeleaper:6&amp;extent=300&amp;speed=0&amp;palette=0&amp;nopanel=1'
 <span class="c"># the island (top-left) and the red bar (lower-right):</span>
-node tools/shot.mjs "$URL" island.png 3500 --size 1500,1413 --clip 110,60,280,240 --scale 4
-node tools/shot.mjs "$URL" bar.png 3500 --size 1500,1413 --clip 1180,1185,280,255 --scale 4</pre>
+node tools/shot.mjs "$URL" island.png 3500 --size 1500,1500 --clip 79,71,280,240 --scale 4
+node tools/shot.mjs "$URL" bar.png 3500 --size 1500,1500 --clip 1215,1245,280,255 --scale 4</pre>
 
   <h3>Carnival — three reach-scales at once</h3>
   <p class="combo">wazir+ferz ×2 &nbsp;+&nbsp; knight+dabbaba ×2 &nbsp;+&nbsp; zebra+antelope ×2 &nbsp;·&nbsp; Vivid palette &nbsp;·&nbsp; extent 300</p>
@@ -370,7 +370,7 @@ node tools/shot.mjs "$URL" dots.png 3000 --size 1200,1200 --clip 600,450,250,90 
 
   <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=alfil:4,wazir:4&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
 <span class="c"># the two biggest peaks, bottom-left of the range</span>
-node tools/shot.mjs "$URL" zoom.png 5500 --size 2000,1913 --clip 160,1560,560,400 --scale 1.6</pre>
+node tools/shot.mjs "$URL" zoom.png 5500 --size 2000,2000 --clip 160,1560,560,400 --scale 1.6</pre>
 
   <h3>Three diagonal bugs — 8-color mixed roster</h3>
   <p class="combo">knight ×4 &nbsp;+&nbsp; knight+antelope ×3 &nbsp;+&nbsp; dabbaba+three-leaper ×1 &nbsp;·&nbsp; Vivid palette</p>
@@ -408,7 +408,7 @@ node tools/shot.mjs "$URL" zoom.png 5500 --size 2000,1913 --clip 160,1560,560,40
 
   <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=knight:4,knight-antelope:3,dabbaba-threeleaper:1&amp;extent=1000&amp;speed=0&amp;palette=0&amp;nopanel=1'
 <span class="c"># the three bugs + red/yellow corner (they sit at world (752,756) -> (810,810) -> (848,848))</span>
-node tools/shot.mjs "$URL" bugs.png 3500 --size 6000,5913 --clip 5190,390,420,420 --scale 3</pre>
+node tools/shot.mjs "$URL" bugs.png 3500 --size 6000,6000 --clip 5225,399,420,420 --scale 3</pre>
 
   <h3>One saboteur, one grain — knight + antelope</h3>
   <p class="combo">knight ×7 &nbsp;+&nbsp; antelope ×1 &nbsp;·&nbsp; Vivid palette &nbsp;·&nbsp; extent 500</p>
@@ -450,8 +450,8 @@ node tools/shot.mjs "$URL" bugs.png 3500 --size 6000,5913 --clip 5190,390,420,42
 
   <pre>URL='https://chrismo.github.io/screensavers/knights/?groups=knight:7,antelope:1&amp;extent=500&amp;speed=0&amp;palette=0&amp;nopanel=1'
 <span class="c"># the ring-string (red, upper-right) and the island (green, lower-right):</span>
-node tools/shot.mjs "$URL" rings.png 4000 --size 1600,1513 --clip 1240,55,350,300 --scale 4
-node tools/shot.mjs "$URL" island.png 4000 --size 1600,1513 --clip 1300,1260,300,300 --scale 4</pre>
+node tools/shot.mjs "$URL" rings.png 4000 --size 1600,1600 --clip 1260,0,340,340 --scale 4
+node tools/shot.mjs "$URL" island.png 4000 --size 1600,1600 --clip 1400,1400,200,200 --scale 4</pre>
 
   <h3>The D6 menagerie — one roster, a whole zoo of anomalies</h3>
   <p class="combo">knight ×6 &nbsp;+&nbsp; knight+antelope ×1 &nbsp;+&nbsp; dabbaba+three-leaper ×1 &nbsp;·&nbsp; Vivid palette</p>
@@ -495,9 +495,9 @@ G='knight:6,knight-antelope:1,dabbaba-threeleaper:1'
 shot() { node tools/shot.mjs "https://chrismo.github.io/screensavers/knights/?groups=$G&amp;extent=$1&amp;speed=0&amp;palette=0&amp;nopanel=1" "$2" "${@:3}"; }
 shot 200 caterpillar.png        3000 --size 1200,1200 --clip 230,763,200,200 --scale 5
 shot 600 caterpillar-adrift.png 5500 --size 1200,1200 --clip 1116,22,66,58   --scale 8
-shot 200 crosshair.png          3000 --size 1400,1313 --clip 1010,968,190,165 --scale 6
+shot 200 crosshair.png          3000 --size 1400,1400 --clip 1037,1038,190,165 --scale 6
 shot 300 worm.png               3500 --size 1400,1400 --clip 192,708,175,55   --scale 7
-shot 300 spines.png             3500 --size 1400,1313 --clip 850,650,430,340  --scale 3.3
+shot 300 spines.png             3500 --size 1400,1400 --clip 874,704,430,340  --scale 3.3
 shot 700 ornate-corner.png      5500 --size 1200,1200 --clip 1095,0,105,105   --scale 6</pre>
 
   <footer>
