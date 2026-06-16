@@ -3,7 +3,7 @@
 Deferred ideas that aren't specific to one sketch. When built, most of these
 probably belong in the shared infrastructure (`panel.js` / `chrome.js`) so every
 sketch benefits, rather than being reimplemented per sketch. Sketch-specific
-ideas live in that sketch's own notes (e.g. `knights/spec.md`).
+ideas live in that sketch's own notes (e.g. `knights/ideas.md`).
 
 ## Preset banks / URL-carried presets
 
@@ -51,109 +51,26 @@ patterns can be categorized — then auto-label, auto-curate, or sample for
 variety. Composes with **preset banks** above (auto-curated banks = one exemplar
 per cluster).
 
-Two complementary angles (worked example = knights):
+Two complementary angles:
 
-- **By output — measure the field.** knights' `occGrid` (color per cell) yields
-  cheap, discriminating metrics. The key: *no single metric works* — you need a
-  few, because e.g. checkerboard and chaos both have lots of edges but differ
-  wildly in periodicity. A usable set:
-  - **periodicity** (FFT-peak ratio / autocorrelation) — repeats vs not
-  - **region size** (mean contiguous same-color blob) — fragmented vs large
-  - **local entropy** (color diversity in NxN windows) — busy vs ordered
-  - **anisotropy** (directional autocorrelation) — diagonal bands vs radial
-    pinwheel vs isotropic chaos
-
-  Families seen so far separate on these: clean diagonal **bands** (pure knights),
-  **checkerboard** (wazir ×2), **pinwheel/radial** (wazir+ferz ×6), **quilt**
-  (ferz+dab ×8), **turbulent mosaic** (mixed-reach compounds, e.g. knight+antelope
-  ×2). Computable from data we already have; full FFT at S=1000 (≈4M cells) wants
-  downsampling, but region-size + windowed-entropy are cheap as-is.
-  - *Sub-feature — defects.* Large solid domains can carry tiny **defects**: lone
-    specks or little "bug" knots of empty + stolen cells. Two kinds seen so far —
-    **interior islands** (specks deep inside a solid field, seeded by a single
-    long-reach piece vetoing one cell) and **domain-wall** defects (blooms along
-    the empty-cell borders between domains). Only appear with long-reach compound
-    pieces in the roster. (Worked example: `knights/gallery.html`.)
-
-- **By input — predict from the roster** (cheaper, surprisingly strong). Often you
-  can call the family before solving:
-  - **# of distinct reaches** (Chebyshev radius per leaper): same reach → orderly;
-    *mixed* reaches → chaos (the knight-2 + antelope-4 discovery).
-  - **# colors (K)** — more interference.
-  - **colorboundness** — ferz/alfil/dabbaba only attack one parity sublattice, so
-    they can't reach the "other color" cells; this is *why* they make clean
-    quilt/checker textures. Knight/wazir aren't colorbound. Big driver.
-  - **OR vs AND compounding**, if that knob is ever added.
+- **By output — measure the field.** A few cheap, discriminating metrics (no single
+  one works): **periodicity** (FFT-peak / autocorrelation), **region size** (mean
+  same-color blob), **local entropy** (color diversity in NxN windows),
+  **anisotropy** (directional autocorrelation).
+- **By input — predict from the roster/params** before solving (often surprisingly
+  strong): reach diversity, # colors, colorboundness, compounding mode.
 
 **Payoffs:** auto-label the current pattern in the panel; **auto-curated preset
 banks** (one per cluster); a **"surprise me"** that samples diverse families;
-**interestingness filtering** (skip degenerate solid/checkerboard runs).
+**interestingness filtering** (skip degenerate runs).
+
+The worked example is knights — its concrete catalog of observed families, roster
+predictors, and defect types (from a 2026-06 render sweep) lives in
+[`knights/ideas.md`](knights/ideas.md).
 
 (Noted 2026-06-12; explicitly a "someday, if in the mood" — the user likes
 playing/watching more than instrumenting. Captured so the taxonomy doesn't have
 to be re-derived.)
-
-### Findings from a render sweep (2026-06-13)
-
-A predict-then-render pass over many knights rosters (scratch writeups in
-`tmp/explore/notes.md` + `mix-notes.md`; exemplars now in `knights/gallery.html`)
-validated the by-input predictors above and added several axes/families.
-
-**New / refined families (by output):**
-
-- **Pinwheel / sunburst** (refines "pinwheel/radial" above) — large flat angular
-  sectors meeting at a central singularity. Comes from short-reach pieces with *full
-  nearest-neighbor coverage* (the "king" = wazir+ferz). Tunable by K (see sweet-spot).
-- **Circuit-board / labyrinth (maze)** — winding Manhattan-routed colored conduits
-  separated by black domain-wall seams. Recipe: a domain-forming short piece (king)
-  **+ exactly ONE long-reach piece**, whose far vetoes carve walls through the king's
-  fat domains. The long piece's reach tunes it: knight (r2) → tight architectural
-  terraces; zebra (r3) → dense PCB with "solder pads"; antelope (r4) → long flowing
-  conduits. (Without the domain-former it's just static — the king builds the domains
-  the long piece then carves.)
-- **Pyramids / sawtooth** — a colorbound piece fills a speckled "sky" while a plain
-  piece builds smooth domains whose walls radiate from the spiral origin as straight
-  rays → triangular "pyramids" with self-similar sawtooth edges and striped/gradient
-  faces that read as pseudo-3D shading. (gallery: *Pyramids*.)
-
-**New by-input axes:**
-
-- **Neighbor-coverage** — short reach + FULL nearest-neighbor coverage makes LARGE
-  angular sectors, the *opposite* of the "small mosaic" you'd guess from short reach:
-  each color, blocking every neighbor, claims a whole angular wedge.
-- **Sweet-spot K for domain-formers** — a too-"matched" K collapses to four flat
-  quadrants (king at K=4; the colorbound trio ferz+dab+alfil at K=8). Richness lives
-  at intermediate K (~6).
-
-**Defect refinement** (extends the *defects* sub-feature above) — defects split by
-reach × colorboundness: short-reach *colorbound* pieces get blocked on a single
-sublattice, so their empties align into **linear** (row/column) defects; long-reach
-mixes scatter **point** (island) defects. (gallery: *A dotted line* vs *Three
-diagonal bugs*.)
-
-**Mixing compounds across colors (heterogeneous rosters)** — the richest axis:
-different color groups get different compounds, so colors compete asymmetrically.
-
-- **Dichotomy > diversity.** One clear two-regime contrast beats many-way blends
-  (which average back to a pinwheel or to uniform busy). Pick TWO contrasting types
-  and let them segregate.
-- **Contrast flavors:** *smooth-vs-grain* (non-CB vs CB at equal counts → a "petal
-  flower" of alternating satin/velvet wedges; grain agent alfil > ferz, smooth agent
-  must be the weak wazir — knight is too domain-capable); *calm-vs-busy*
-  (domain-former vs disruptor); *muted-vs-vivid* (dabbaba's sparse fill reads
-  desaturated → antique/watercolor palettes — dabbaba is the "muted agent").
-- **Chaos-placement dial:** a disruptor that *can* form domains (has a near-neighbor
-  component, e.g. knight+antelope) is pushed to a busy outer FRAME around a calm core;
-  a *purely* long-reach disruptor (zebra/antelope alone) can't claim territory, so it
-  dumps its interference at the spiral CENTER → busy core, calm radial frame.
-  (gallery: *Rose window* vs *Chrysanthemum* — inverses.)
-- **High-coverage colors win the center;** long-reach accent colors concentrate their
-  chaos at the spiral origin (where all cursors converge).
-
-**Deterministic nesting** — solve order doesn't depend on extent, so a small-extent
-field is exactly the *center* of a large-extent one; raising the extent only reveals
-new outer regions butting against the same core. (gallery: *Muted & vivid*, 300 vs
-1000.)
 
 ## Image export — save the current frame as a PNG
 
@@ -173,16 +90,3 @@ sketch URL headlessly (used for verification) — the in-sketch download would b
 the user-facing version of the same capability.
 
 (Noted 2026-06-12.)
-
-## Interactive click-drag zoom (knights — tag: v3)
-
-In the sketch itself, **drag a rectangle to zoom into that region** (and a key to zoom
-back out). Right now finding the little defect "critters" (crosshairs, caterpillars,
-ring-strings, bugs) means eyeballing the full field and re-rendering a `--clip` with
-`tools/shot.mjs` to inspect — a drag-zoom would make that exploration live and immediate.
-Pairs naturally with **image export** above (zoom in, then save the crop) and the
-deterministic-nesting property (the same critters exist at every extent, just shrunk —
-so zoom is the right verb, not re-solve). Knight-specific UX for now, but the rubber-band
-+ viewport-transform mechanism would generalize to any canvas sketch.
-
-(Noted 2026-06-13; explicitly deferred to a knights **v3** at the user's call.)

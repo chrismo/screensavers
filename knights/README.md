@@ -97,7 +97,7 @@ Example: a 6-color Ferz+Dabbaba compound, mid-run —
 
 This Canvas2D view replaced an earlier WebGL sketch that swept the finished
 pattern — the per-cursor construction-order reveal shows dynamics the uniform
-sweep averaged away. See [`spec.md`](spec.md) for the design decisions and
-migration history. Generic panel/page chrome is shared with the
+sweep averaged away. See [`ideas.md`](ideas.md) for the design rationale and
+deferred work. Generic panel/page chrome is shared with the
 rest of the gallery via `../panel.js` and `../chrome.js`; the knights-specific
 solver and piece math live inline here.

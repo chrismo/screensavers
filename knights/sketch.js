@@ -16,7 +16,7 @@
 //
 // History: this Canvas2D construction-order view replaced an earlier WebGL sketch
 // that swept the finished pattern (the per-cursor reveal shows dynamics the
-// uniform sweep averaged away). See spec.md for the design decisions. Generic
+// uniform sweep averaged away). See ideas.md for the design rationale. Generic
 // panel/page chrome lives in ../panel.js + ../chrome.js; the knights solver and
 // piece math are inline below.
 
