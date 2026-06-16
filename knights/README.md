@@ -13,7 +13,7 @@ color** (same-color attacks are allowed — that asymmetry is what breeds the
 large-scale pattern).
 
 The default landing is the two-knight coloring from the video (`knight:2`, Vivid
-palette, extent 400); add more pieces and groups from the panel to go further.
+palette, extent 1000); add more pieces and groups from the panel to go further.
 
 It **narrates** that decision and then lets it run:
 
@@ -67,8 +67,8 @@ each group's actual colors.
   `-` (a compound leaper), count after `:`, groups separated by `,`. (`-` not
   `+`: in a query string `+` decodes to a space.) Roster: `knight`, `wazir`,
   `ferz`, `dabbaba`, `alfil`, `threeleaper`, `zebra`, `antelope`.
-- `extent=400` — spiral half-extent S (grid is (2S+1)²). Steps on a ladder
-  (`24 · 100 · 200 · … · 1000`, default `400`); the panel arrows / `[` `]` move
+- `extent=1000` — spiral half-extent S (grid is (2S+1)²). Steps on a ladder
+  (`24 · 100 · 200 · … · 1000`, default `1000`); the panel arrows / `[` `]` move
   between rungs and a URL value snaps to the nearest. The small `24` rung keeps
   the solve readable for watching the narration; bigger plays longer and shows
   more of the emergent pattern before it fills.
@@ -87,7 +87,8 @@ each group's actual colors.
   only — default), `grid` (plain grid bounded to the extent), or `both`. Only
   shown while zoomed in; fades out as the field fills.
 - `cycle=1` — rotate to the next preset between runs.
-- `nopanel=1` — hide the panel (screensaver mode).
+- `panel=open` — start with the control drawer open (it's closed by default).
+- `nopanel=1` — hide the panel entirely (screensaver mode).
 
 Example: a 6-color Ferz+Dabbaba compound, mid-run —
 `?groups=ferz-dabbaba:6&start=0.5&nopanel=1`.

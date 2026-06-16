@@ -137,12 +137,12 @@ function leaperOffsets(piece) {
 }
 
 // Bump the MINOR on each change so the panel shows when a new build has loaded.
-const VERSION = '2.24';
+const VERSION = '2.25';
 
 // =======================================================================
 // Live params (URL-overridable, panel-tunable)
 // =======================================================================
-let extent = 400;        // S: max spiral shell ≈ half the grid side (a rung on EXTENT_STEPS)
+let extent = 1000;       // S: max spiral shell ≈ half the grid side (a rung on EXTENT_STEPS)
 // Speed is a discrete LEVEL (what the panel gauge and the URL store), mapped to an
 // actual placements/sec rate via a geometric ladder. Level 0 = static; 1..8 index
 // SPEED_RATES. The fractional slow rates never surface in the panel or the URL.
