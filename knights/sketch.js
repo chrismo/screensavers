@@ -17,26 +17,18 @@
 // History: this Canvas2D construction-order view replaced an earlier WebGL sketch
 // that swept the finished pattern (the per-cursor reveal shows dynamics the
 // uniform sweep averaged away). See ideas.md for the design rationale. Generic
-// panel/page chrome lives in ../panel.js + ../chrome.js; the knights solver and
-// piece math are inline below.
+// panel/page chrome lives in ../panel.js + ../chrome.js; the solver core — the
+// pieces, the spiral order, and the construction rule (PIECES, PIECE_NAMES,
+// spiralStep, leaperOffsets, solveSteps) — lives in solver.js, loaded before this
+// script and shared verbatim with the node explorer in explore/.
 
 // =======================================================================
-// Duplicated pure core (kept in sync with ../knights/sketch.js by hand)
+// Color-count bounds + per-piece display labels (UI only; the piece math and the
+// solver itself are in solver.js).
 // =======================================================================
 const MIN_COLORS = 2;
 const MAX_COLORS = 8;
 
-const PIECES = {
-  knight:      [2, 1],
-  wazir:       [1, 0],
-  ferz:        [1, 1],
-  dabbaba:     [2, 0],
-  alfil:       [2, 2],
-  threeleaper: [3, 0],
-  zebra:       [3, 2],
-  antelope:    [4, 3],
-};
-const PIECE_NAMES = Object.keys(PIECES);
 const PIECE_LABEL = {
   knight: 'Knight', wazir: 'Wazir', ferz: 'Ferz', dabbaba: 'Dabbaba',
   alfil: 'Alfil', threeleaper: 'Three-leaper', zebra: 'Zebra', antelope: 'Antelope',
@@ -116,28 +108,10 @@ function normalizeGroups() {
   while (totalColors() < MIN_COLORS) groups[groups.length - 1].count++;
 }
 
-// Square spiral: counterclockwise, starts at origin, first step east.
-function spiralStep(a, b) {
-  if (a === 0 && b === 0) return [1, 0];
-  if (a > Math.abs(b)) return [a, b + 1];
-  if (a < -Math.abs(b)) return [a, b - 1];
-  if (b > Math.abs(a)) return [a - 1, b];
-  if (b < -Math.abs(a)) return [a + 1, b];
-  if (a === b && a > 0) return [a - 1, b];
-  if (a === b && a < 0) return [a + 1, b];
-  if (a === -b && a > 0) return [a + 1, b];
-  return [a, b - 1];
-}
-function leaperOffsets(piece) {
-  const [m, n] = PIECES[piece] || PIECES.knight;
-  return [
-    [m, n], [m, -n], [-m, n], [-m, -n],
-    [n, m], [-n, m], [n, -m], [-n, -m],
-  ];
-}
+// spiralStep + leaperOffsets live in solver.js (loaded before this script).
 
 // Bump the MINOR on each change so the panel shows when a new build has loaded.
-const VERSION = '2.25';
+const VERSION = '2.26';
 
 // =======================================================================
 // Live params (URL-overridable, panel-tunable)
@@ -160,8 +134,6 @@ let spiralStyle = 'spiral'; // grid/spiral view: 'none' | 'spiral' | 'grid' | 'b
 const TAU = 6.0;             // seconds; placement rate ≈ speed·e^(t/TAU) (bigger = gentler ramp)
 const NARRATE_PX = 22;       // cell px above which we draw the step overlay
 const NARRATE_RATE_MAX = 10; // placements/sec above which narration is too fast
-const DETAIL_CAP = 300;      // record scan/threat detail for only the first N events
-const SCAN_CAP = 600;        // max recorded evaluations per turn (detail events)
 const EVAL_EVENTS = 12;      // first N placements play eval-by-eval (slow intro)
 const EVAL_PER_SEC = 14;     // intro cursor evals/sec AT speed=2 (scales with speed so the knob is the overall tempo)
 const XMARK_FADE = 2.6;      // seconds a conflict ✕ lingers after the cursor passes it
@@ -199,87 +171,10 @@ const helpText = {
   palette: 'Color scheme. Colors evenly span the hue wheel for however many colors the groups add up to.',
 };
 
-// =======================================================================
-// Stepwise solver — same algorithm as ../knights/ simulate(), instrumented to
-// emit the placement SEQUENCE. Each event is either a placement ('p', with the
-// cell, the squares it now threatens, and the cells it skipped + why) or an
-// 'exhausted' turn ('x', a color that ran off the grid — the "or none").
-// =======================================================================
-let lastSimMs = 0;
-
-function solveSteps(S) {
-  const W = 2 * S + 1;
-  const occ = new Int8Array(W * W);
-  const threat = new Uint8Array(W * W);
-  const idx = (x, y) => (y + S) * W + (x + S);
-  const inGrid = (x, y) => x >= -S && x <= S && y >= -S && y <= S;
-
-  const colorOffs = [];
-  for (const g of groups) {
-    const offs = g.pieces.flatMap(leaperOffsets);
-    for (let i = 0; i < g.count; i++) colorOffs.push(offs);
-  }
-  const K = colorOffs.length;
-
-  const cx = new Int32Array(K), cy = new Int32Array(K);
-  const done = new Array(K).fill(false);
-  let remaining = K;
-
-  // The construction sequence lives in flat typed arrays (one entry per event) so
-  // it scales to large extents; rich per-step detail (scan/threats) is kept only
-  // for the first DETAIL_CAP events — the narrated opening — as objects.
-  const cap = W * W + K; // placements ≤ cells, plus one "exhausted" event per color
-  const seqT = new Uint8Array(cap);  // 0 = placement, 1 = exhausted turn
-  const seqK = new Uint8Array(cap);  // color
-  const seqX = new Int16Array(cap);  // cell (placements only)
-  const seqY = new Int16Array(cap);
-  const detail = [];                 // {scan,threats} for events < DETAIL_CAP; sparse after
-  let N = 0;
-
-  const t0 = performance.now();
-  while (remaining > 0) {
-    for (let k = 0; k < K; k++) {
-      if (done[k]) continue;
-      let x = cx[k], y = cy[k];
-      const notK = (~(1 << k)) & 0xff;
-      const wantDetail = N < DETAIL_CAP;
-      const scan = wantDetail ? [] : null; // every cell the cursor evaluated and rejected
-      let off = false;
-      while (true) {
-        if (x > S || x < -S || y > S || y < -S) { done[k] = true; remaining--; off = true; break; }
-        const id = idx(x, y);
-        if (occ[id] === 0 && (threat[id] & notK) === 0) break;
-        if (wantDetail && scan.length < SCAN_CAP) {
-          if (occ[id] !== 0) scan.push({ x, y, kind: 'occ', by: occ[id] - 1 });
-          else {
-            let by = -1;
-            for (let b = 0; b < K; b++) { if (b !== k && (threat[id] & (1 << b))) { by = b; break; } }
-            scan.push({ x, y, kind: 'threat', by });
-          }
-        }
-        const nxt = spiralStep(x, y);
-        x = nxt[0]; y = nxt[1];
-      }
-      cx[k] = x; cy[k] = y;
-      if (off) { seqT[N] = 1; seqK[N] = k; if (wantDetail) detail[N] = null; N++; continue; }
-
-      const id = idx(x, y);
-      occ[id] = k + 1;
-      const bit = 1 << k;
-      const offs = colorOffs[k];
-      const threats = wantDetail ? [] : null;
-      for (let o = 0; o < offs.length; o++) {
-        const tx = x + offs[o][0], ty = y + offs[o][1];
-        if (inGrid(tx, ty)) { threat[idx(tx, ty)] |= bit; if (wantDetail) threats.push([tx, ty]); }
-      }
-      seqT[N] = 0; seqK[N] = k; seqX[N] = x; seqY[N] = y;
-      if (wantDetail) detail[N] = { scan, threats };
-      N++;
-    }
-  }
-  lastSimMs = performance.now() - t0;
-  return { N, K, S, W, colorOffs, seqT, seqK, seqX, seqY, detail };
-}
+// The stepwise solver (solveSteps) lives in solver.js. It returns the placement
+// SEQUENCE in flat typed arrays — each event a placement or an 'exhausted' turn (a
+// color that ran off the grid) — plus per-step scan/threat detail for the narrated
+// opening, the finished board, and the solve time.
 
 // =======================================================================
 // Canvas2D renderer
@@ -453,7 +348,7 @@ function rebuild(resetRun = true) {
   const S = Math.max(24, Math.min(extent, 1000));
   if (S !== extent) extent = S;
   normalizeGroups();
-  sim = solveSteps(S);
+  sim = solveSteps(groups, S);
   palCols = genColors(curPalette(), Math.max(1, sim.K));
   colorLabel = [];
   for (const g of groups) { const lbl = pieceSetLabel(g.pieces); for (let i = 0; i < g.count; i++) colorLabel.push(lbl); }
@@ -464,7 +359,7 @@ function rebuild(resetRun = true) {
   occGrid = new Int8Array(sim.W * sim.W);
   threatGrid = new Uint8Array(sim.W * sim.W);
   cursors = new Array(sim.K).fill(null);
-  console.log(`[knights] ${labelText()} — S=${sim.S}, ${sim.K} colors, ${sim.N} events in ${lastSimMs.toFixed(1)}ms`);
+  console.log(`[knights] ${labelText()} — S=${sim.S}, ${sim.K} colors, ${sim.N} events in ${sim.simMs.toFixed(1)}ms`);
   if (resetRun) startRun();
   updateDom();
   updateConfigLabel();

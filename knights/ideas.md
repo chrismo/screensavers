@@ -4,6 +4,10 @@ Knights-specific backlog and the design rationale worth keeping. Cross-sketch
 ideas (preset banks, image export, the general output-fingerprinting idea) live
 in the repo-root [`../ideas.md`](../ideas.md).
 
+The offline pattern miner — which runs the shared [`../solver.js`](../solver.js)
+headless in node to sweep and score the roster space — lives in
+[`explore/`](explore/).
+
 ## Interactive click-drag zoom (tag: v3)
 
 In the sketch itself, **drag a rectangle to zoom into that region** (and a key to
@@ -57,7 +61,9 @@ point until then.
 The cross-sketch *idea* (fingerprint a generative sketch's output to categorize
 it) lives in [`../ideas.md`](../ideas.md); this is the knights **catalog** of what
 actually shows up, from a predict-then-render sweep (exemplars in
-[`gallery.html`](gallery.html)).
+[`gallery.html`](gallery.html)). The [`explore/`](explore/) miner now does that
+sweep automatically — scoring boards for domains / chaos / symmetry / weaves — so
+this catalog is the human-curated read of what its lenses keep surfacing.
 
 **Predict from the roster (by input, cheap and strong):**
 
