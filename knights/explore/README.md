@@ -21,19 +21,44 @@ The miner separates *what a sweep finds* (regenerable) from *the gems worth keep
   each `{ name, url, lens, note }`. `lens` records which lens surfaced it ('reference'
   for anchors). This is the durable list and the on-ramp to `gallery.html` / `presets[]`.
 
+## The keep loop
+
+Sweep → render → spot the ones you like → keep them by tile number → load them live:
+
+```
+node explore.mjs              # sweep -> picks.json
+node montage.mjs picks.json   # contact sheet -> sheet.png (+ sheet.json sidecar)
+node keep.mjs 6 17 22         # append tiles 6/17/22 to keepers.json (name/note = TODO)
+# ...edit the TODO name/note in keepers.json...
+node links.mjs                # live URLs for every keeper -> links.html
+```
+
+`keep.mjs` reads the `sheet.json` sidecar from the last `montage.mjs` run, so a tile
+*index* unambiguously maps to a roster regardless of which list you rendered. It dedupes
+by url and drops in `TODO` name/note for you to fill — `grep TODO keepers.json` finds
+what still needs naming.
+
 ## Files
 
 - **`score.mjs`** — shared scoring: `features(occ, K)`, the `LENSES` (scorer + filter
   each), and `parseUrl`/`rosterUrl`. One definition so the sweep and its output agree.
 - **`explore.mjs`** — sweep a tractable slice of rosters, print the top picks per lens,
   and write `picks.json`. `node explore.mjs` (or `node explore.mjs 20` for top-20).
-- **`montage.mjs`** — render a list into one contact-sheet PNG (`sheet.png`, gitignored)
-  in the Vivid palette + a tile→name/url legend. `node montage.mjs` (reads
+- **`montage.mjs`** — render a list into one contact-sheet PNG (`sheet.png`) + a
+  `sheet.json` sidecar (tile→roster map) in the Vivid palette. `node montage.mjs` (reads
   `keepers.json`) or `node montage.mjs picks.json` (renders the last sweep).
+- **`keep.mjs`** — `node keep.mjs <index> ...` appends those tiles (from `sheet.json`)
+  to `keepers.json` with placeholder name/note. Dedupes by url.
+- **`links.mjs`** — `node links.mjs [file]` prints live URLs for a list and writes a
+  clickable `links.html` ("open all in tabs"). `--base <url>` for local/other hosts,
+  `--params <str>` to override the default `palette=0&static=1`.
 - **`png.mjs`** — no-deps truecolor PNG encoder (node zlib) + the Vivid palette ported
   from `sketch.js`'s `genColors`, so thumbnails match the live colors.
 - **`verify.mjs`** — drift guard: fingerprints canonical boards and asserts they match
   known-good hashes. `node verify.mjs`
+
+Committed: source + `keepers.json` (the curated list). Gitignored (regenerable):
+`sheet.png`, `sheet.json`, `picks.json`, `links.html`.
 
 ## Reproducing a find
 
