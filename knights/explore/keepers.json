@@ -1,123 +1,143 @@
 {
-  "_about": "Curated keepers — the gems worth remembering. Hand-edited. `url` is the groups string (live at ../?groups=<url>); `lens` records which explore.mjs lens surfaced it (or 'reference'). Render with: node montage.mjs (reads this file). The on-ramp to gallery.html / presets[].",
+  "_about": "Curated keepers — the gems worth remembering. Hand-edit name/url/lens/note; `url` is the groups string. `link` is the canonical live URL, tool-stamped from `url` — don't hand-edit it; run `node links.mjs --stamp` after changing rosters. `lens` records which explore.mjs lens surfaced it (or 'reference'). Render with `node montage.mjs`. The on-ramp to gallery.html / presets[].",
   "keepers": [
     {
       "name": "Red & Black",
       "url": "knight:2",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight:2&palette=0&static=1",
       "lens": "reference",
       "note": "the classic interlocking knight tessellation with the solid red box — the default"
     },
     {
       "name": "Knights x3",
       "url": "knight:3",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight:3&palette=0&static=1",
       "lens": "reference",
       "note": "three-color turbulent diagonal bands"
     },
     {
       "name": "Big Sky",
       "url": "knight:1,threeleaper:1",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight:1,threeleaper:1&palette=0&static=1",
       "lens": "bugs",
       "note": "huge solid field, one jagged shard, only a handful of island defects"
     },
     {
       "name": "Lightning Crack",
       "url": "knight:1,alfil:1",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight:1,alfil:1&palette=0&static=1",
       "lens": "bugs",
       "note": "solid field split by a single red crack + a tiny defect cluster — minimal/dramatic"
     },
     {
       "name": "Diagonal Bugs",
       "url": "dabbaba:1,zebra:1",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=dabbaba:1,zebra:1&palette=0&static=1",
       "lens": "bugs",
       "note": "solid field studded with small clustered diagonal islands — kin to the original three-bugs find"
     },
     {
       "name": "Circuit Bar",
       "url": "knight-threeleaper:2",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight-threeleaper:2&palette=0&static=1",
       "lens": "bugs",
       "note": "a domain crossed by a diagonal circuit-board bar"
     },
     {
       "name": "Pinwheel",
       "url": "ferz:1,knight:1",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=ferz:1,knight:1&palette=0&static=1",
       "lens": "symmetry",
       "note": "8-pointed pinwheel/sunburst, near-perfect symmetry"
     },
     {
       "name": "Quadrant Cross",
       "url": "alfil:1,knight:1",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=alfil:1,knight:1&palette=0&static=1",
       "lens": "symmetry",
       "note": "teal field, red quadrant, a clean central cross axis"
     },
     {
       "name": "Compass",
       "url": "alfil-antelope:2",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=alfil-antelope:2&palette=0&static=1",
       "lens": "symmetry",
       "note": "a big diagonal X starburst of textured defects from the center"
     },
     {
       "name": "Bowtie",
       "url": "knight-antelope:2",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight-antelope:2&palette=0&static=1",
       "lens": "symmetry",
       "note": "four-fold pattern with a fuzzy diagonal cross"
     },
     {
       "name": "Torn Paper",
       "url": "wazir:2,knight:2",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=wazir:2,knight:2&palette=0&static=1",
       "lens": "chaos",
       "note": "muted quadrants with a noisy torn center"
     },
     {
       "name": "Flower Burst",
       "url": "knight:4,wazir:3",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight:4,wazir:3&palette=0&static=1",
       "lens": "chaos",
       "note": "purple/teal/green wedges around a chaotic flower core, 7 colors"
     },
     {
       "name": "Spider",
       "url": "ferz:2,wazir:4",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=ferz:2,wazir:4&palette=0&static=1",
       "lens": "chaos",
       "note": "yellow/gray field with a purple spider-burst, 6 colors"
     },
     {
       "name": "Confetti",
       "url": "knight-dabbaba:8",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight-dabbaba:8&palette=0&static=1",
       "lens": "weaves",
       "note": "full 8-color confetti pinwheel"
     },
     {
       "name": "Kaleidoscope",
       "url": "knight-ferz:8",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight-ferz:8&palette=0&static=1",
       "lens": "weaves",
       "note": "8-color radial with a strong central cross"
     },
     {
       "name": "Wallpaper",
       "url": "wazir-ferz:8",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=wazir-ferz:8&palette=0&static=1",
       "lens": "weaves",
       "note": "pastel pinwheel quadrants, clean wedges"
     },
     {
       "name": "Conduit",
       "url": "threeleaper:1,knight:4",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=threeleaper:1,knight:4&palette=0&static=1",
       "lens": "chaos",
       "note": "purple/teal/red with a black diagonal circuit bar, 5 colors"
     },
     {
       "name": "Sunburst",
       "url": "zebra:1,alfil:1",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=zebra:1,alfil:1&palette=0&static=1",
       "lens": "symmetry",
       "note": "red/teal 8-fold sunburst with a textured core"
     },
     {
       "name": "Seam",
       "url": "knight:1,antelope:1",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight:1,antelope:1&palette=0&static=1",
       "lens": "bugs",
       "note": "teal/red fractured field bisected by a vertical column of dotted defects, with red flame-shards thrown into the corners"
     },
     {
       "name": "Pyramids",
       "url": "wazir:4,ferz:1",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=wazir:4,ferz:1&palette=0&static=1",
       "lens": "chaos",
       "note": "fine colorbound 'static' sky with two bold magenta pyramids rising from the base — the pyramids/sawtooth family"
     }

@@ -1,18 +1,22 @@
 // Generate live URLs for a list of rosters so you can load and eyeball them all.
 //   node links.mjs                 # from keepers.json
 //   node links.mjs picks.json      # from the last sweep
+//   node links.mjs --stamp         # write a canonical `link` field into keepers.json
 //   node links.mjs --base file:///Users/you/.../knights/   # local instead of deployed
 //   node links.mjs --params "palette=0"                    # override the extra query
 // Prints the URLs and writes links.html (a clickable list + an "open all" button).
 import { readFileSync, writeFileSync } from 'node:fs';
+import { BASE, DEFAULT_PARAMS, linkFor } from './score.mjs';
 
 const args = process.argv.slice(2);
-let base = 'https://chrismo.github.io/screensavers/knights/';
-let params = 'palette=0&static=1'; // matches the sheet's finished, Vivid look
+let base = BASE;
+let params = DEFAULT_PARAMS; // matches the sheet's finished, Vivid look
+let stamp = false;
 const pos = [];
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--base') base = args[++i];
   else if (args[i] === '--params') params = args[++i];
+  else if (args[i] === '--stamp') stamp = true;
   else pos.push(args[i]);
 }
 const file = pos[0] || 'keepers.json';
@@ -22,9 +26,17 @@ const data = JSON.parse(readFileSync(here(file)));
 const list = data.keepers || data.picks || data.tiles || data;
 if (!Array.isArray(list) || !list.length) { console.error(`no entries in ${file}`); process.exit(1); }
 
-const sep = base.includes('?') ? '&' : '?';
-const linkFor = (url) => `${base}${sep}groups=${url}${params ? '&' + params : ''}`;
-const rows = list.map((e) => ({ name: e.name || e.url, lens: e.lens || '', url: e.url, href: linkFor(e.url) }));
+// --stamp: rewrite a canonical `link` (deployed BASE + DEFAULT_PARAMS, ignoring any
+// --base/--params override) into each keeper, derived from its url, and save. Keeps
+// the committed file's links consistent with `url` — re-run after editing rosters.
+if (stamp) {
+  if (!data.keepers) { console.error(`--stamp only works on keepers.json (no .keepers array in ${file})`); process.exit(1); }
+  data.keepers = data.keepers.map((k) => ({ name: k.name, url: k.url, link: linkFor(k.url), lens: k.lens, note: k.note }));
+  writeFileSync(here(file), JSON.stringify(data, null, 2) + '\n');
+  console.log(`stamped link into ${data.keepers.length} keepers -> ${file}`);
+}
+
+const rows = list.map((e) => ({ name: e.name || e.url, lens: e.lens || '', url: e.url, href: linkFor(e.url, base, params) }));
 
 for (const r of rows) console.log(`${r.href}`);
 

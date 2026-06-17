@@ -14,6 +14,16 @@ export function parseUrl(url) {
   });
 }
 
+// Canonical live link for a roster `url` (the groups string). One definition so the
+// stamped keepers.json links and links.html agree. `static=1` shows the finished
+// pattern instantly; palette=0 is Vivid (matches the thumbnails).
+export const BASE = 'https://chrismo.github.io/screensavers/knights/';
+export const DEFAULT_PARAMS = 'palette=0&static=1';
+export function linkFor(url, base = BASE, params = DEFAULT_PARAMS) {
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}groups=${url}${params ? '&' + params : ''}`;
+}
+
 // Board features over the placed cells. occ: Int8Array (0 empty, else color+1).
 export function features(occ, K) {
   const counts = new Array(K + 1).fill(0);

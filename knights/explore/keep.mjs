@@ -6,6 +6,7 @@
 // name/note for you to edit, and dedupes by url. Run montage again afterward to see
 // your keepers. Grep keepers.json for "TODO" to find ones still needing a name/note.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { linkFor } from './score.mjs';
 
 const here = (f) => new URL(`./${f}`, import.meta.url).pathname;
 const idxs = process.argv.slice(2).map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n));
@@ -27,7 +28,7 @@ for (const i of idxs) {
   const tile = byIndex.get(i);
   if (!tile) { console.log(`skip ${i}: no such tile in sheet.json (it has ${sheet.tiles.length} tiles)`); continue; }
   if (have.has(tile.url)) { console.log(`skip ${i}: ${tile.url} already kept`); continue; }
-  data.keepers.push({ name: 'TODO', url: tile.url, lens: tile.lens || 'unknown', note: 'TODO' });
+  data.keepers.push({ name: 'TODO', url: tile.url, link: linkFor(tile.url), lens: tile.lens || 'unknown', note: 'TODO' });
   have.add(tile.url);
   added++;
   console.log(`kept ${i}: ${tile.url} [${tile.lens || 'unknown'}]  (name/note = TODO)`);

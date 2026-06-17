@@ -51,7 +51,9 @@ what still needs naming.
   to `keepers.json` with placeholder name/note. Dedupes by url.
 - **`links.mjs`** — `node links.mjs [file]` prints live URLs for a list and writes a
   clickable `links.html` ("open all in tabs"). `--base <url>` for local/other hosts,
-  `--params <str>` to override the default `palette=0&static=1`.
+  `--params <str>` to override the default `palette=0&static=1`. `--stamp` writes a
+  canonical `link` field into each `keepers.json` entry (derived from `url`, so it
+  never drifts) — re-run it after editing rosters.
 - **`png.mjs`** — no-deps truecolor PNG encoder (node zlib) + the Vivid palette ported
   from `sketch.js`'s `genColors`, so thumbnails match the live colors.
 - **`verify.mjs`** — drift guard: fingerprints canonical boards and asserts they match
