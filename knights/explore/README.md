@@ -9,14 +9,27 @@ and surface the rare gems instead of eyeballing one URL at a time.
 It runs the **same solver as the live sketch** — [`../solver.js`](../solver.js),
 imported here and loaded as a `<script src>` there. One algorithm, two consumers.
 
+## Two lists: the sweep vs. the keepers
+
+The miner separates *what a sweep finds* (regenerable) from *the gems worth keeping*
+(curated):
+
+- **`picks.json`** — the **derivation**, emitted by `explore.mjs`: top-N per lens with
+  each row's score + features + groups. Regenerated every sweep, so it's gitignored.
+  This is the answer to "what's the path to these?" — re-run the sweep, read the file.
+- **`keepers.json`** — the **curation**, hand-edited and committed: the gems you chose,
+  each `{ name, url, lens, note }`. `lens` records which lens surfaced it ('reference'
+  for anchors). This is the durable list and the on-ramp to `gallery.html` / `presets[]`.
+
 ## Files
 
-- **`explore.mjs`** — sweep a tractable slice of rosters, score each board (dominance,
-  edge density, connected-component "islands", symmetry), print the top picks per
-  *lens* (BUGS / CHAOS / SYMMETRY / WEAVES). `node explore.mjs`
-- **`montage.mjs`** — render a curated `PICKS` list into one contact-sheet PNG
-  (`sheet.png`, gitignored) in the Vivid palette + a tile→URL legend. Edit `PICKS`,
-  then `node montage.mjs`.
+- **`score.mjs`** — shared scoring: `features(occ, K)`, the `LENSES` (scorer + filter
+  each), and `parseUrl`/`rosterUrl`. One definition so the sweep and its output agree.
+- **`explore.mjs`** — sweep a tractable slice of rosters, print the top picks per lens,
+  and write `picks.json`. `node explore.mjs` (or `node explore.mjs 20` for top-20).
+- **`montage.mjs`** — render a list into one contact-sheet PNG (`sheet.png`, gitignored)
+  in the Vivid palette + a tile→name/url legend. `node montage.mjs` (reads
+  `keepers.json`) or `node montage.mjs picks.json` (renders the last sweep).
 - **`png.mjs`** — no-deps truecolor PNG encoder (node zlib) + the Vivid palette ported
   from `sketch.js`'s `genColors`, so thumbnails match the live colors.
 - **`verify.mjs`** — drift guard: fingerprints canonical boards and asserts they match
