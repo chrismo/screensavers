@@ -38,7 +38,8 @@ list.forEach((entry, t) => {
   }
   manifest.push({ index: t, r, c, ...entry });
   const label = entry.name ? `${entry.name} — ${entry.url}` : entry.url;
-  const tag = entry.lens ? ` [${entry.lens}]` : '';
+  const tagBits = [entry.family, entry.lens].filter(Boolean).join('/');
+  const tag = tagBits ? ` [${tagBits}]` : '';
   console.log(`tile ${String(t).padStart(2)} [r${r} c${c}]  ${label}${tag}`);
 });
 

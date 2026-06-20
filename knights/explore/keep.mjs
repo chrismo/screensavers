@@ -28,7 +28,7 @@ for (const i of idxs) {
   const tile = byIndex.get(i);
   if (!tile) { console.log(`skip ${i}: no such tile in sheet.json (it has ${sheet.tiles.length} tiles)`); continue; }
   if (have.has(tile.url)) { console.log(`skip ${i}: ${tile.url} already kept`); continue; }
-  data.keepers.push({ name: 'TODO', url: tile.url, link: linkFor(tile.url), lens: tile.lens || 'unknown', note: 'TODO' });
+  data.keepers.push({ name: 'TODO', url: tile.url, link: linkFor(tile.url), lens: tile.lens || 'unknown', ...(tile.family ? { family: tile.family } : {}), note: 'TODO' });
   have.add(tile.url);
   added++;
   console.log(`kept ${i}: ${tile.url} [${tile.lens || 'unknown'}]  (name/note = TODO)`);

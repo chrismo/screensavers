@@ -31,7 +31,7 @@ if (!Array.isArray(list) || !list.length) { console.error(`no entries in ${file}
 // the committed file's links consistent with `url` — re-run after editing rosters.
 if (stamp) {
   if (!data.keepers) { console.error(`--stamp only works on keepers.json (no .keepers array in ${file})`); process.exit(1); }
-  data.keepers = data.keepers.map((k) => ({ name: k.name, url: k.url, link: linkFor(k.url), lens: k.lens, note: k.note }));
+  data.keepers = data.keepers.map((k) => ({ name: k.name, url: k.url, link: linkFor(k.url), lens: k.lens, ...(k.family ? { family: k.family } : {}), note: k.note }));
   writeFileSync(here(file), JSON.stringify(data, null, 2) + '\n');
   console.log(`stamped link into ${data.keepers.length} keepers -> ${file}`);
 }

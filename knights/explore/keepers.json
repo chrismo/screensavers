@@ -140,6 +140,54 @@
       "link": "https://chrismo.github.io/screensavers/knights/?groups=wazir:4,ferz:1&palette=0&static=1",
       "lens": "chaos",
       "note": "fine colorbound 'static' sky with two bold magenta pyramids rising from the base — the pyramids/sawtooth family"
+    },
+    {
+      "name": "Turbine",
+      "url": "knight:4,wazir:3,ferz:1",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight:4,wazir:3,ferz:1&palette=0&static=1",
+      "lens": "chaos",
+      "family": "D-grad",
+      "note": "8-color pinwheel of hatched wedges radiating from the hub (graded knight/wazir/ferz)"
+    },
+    {
+      "name": "Catherine Wheel",
+      "url": "knight:3,wazir:2,zebra:1",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight:3,wazir:2,zebra:1&palette=0&static=1",
+      "lens": "chaos",
+      "family": "D-grad",
+      "note": "firework-style pinwheel, textured wedges spinning out from center"
+    },
+    {
+      "name": "Supernova",
+      "url": "zebra:2,knight:2,wazir:2",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=zebra:2,knight:2,wazir:2&palette=0&static=1",
+      "lens": "chaos",
+      "family": "D-bal",
+      "note": "balanced 6-color pinwheel with a dense speckled blast at the hub"
+    },
+    {
+      "name": "Black Star",
+      "url": "knight-alfil-threeleaper:8",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight-alfil-threeleaper:8&palette=0&static=1",
+      "lens": "weaves",
+      "family": "C",
+      "note": "central black starburst — a dense defect asterisk exploding across colored wedges"
+    },
+    {
+      "name": "Motherboard",
+      "url": "knight-ferz-zebra:8",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight-ferz-zebra:8&palette=0&static=1",
+      "lens": "weaves",
+      "family": "C",
+      "note": "concentric PCB-style maze, circuit traces radiating in 8 colors"
+    },
+    {
+      "name": "Vortex",
+      "url": "knight:5,wazir:2,ferz:1",
+      "link": "https://chrismo.github.io/screensavers/knights/?groups=knight:5,wazir:2,ferz:1&palette=0&static=1",
+      "lens": "weaves",
+      "family": "D-grad",
+      "note": "8-color swirling vortex of graded counts"
     }
   ]
 }
