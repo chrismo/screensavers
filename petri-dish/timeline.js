@@ -158,6 +158,150 @@ function encodePack(pk) {
   }).join(';');
 }
 
+// --- scripts: steps, loop, advancement ------------------------------------
+// A *step* fuses the move and the dwell: "arrive at slot N — by cut, or by lerp
+// over `dur` seconds — then sit there for `dwell` seconds." Fusing them is the
+// point rather than a shortcut: a transition is an *edge*, and welding it to the
+// node it arrives at means there is never a dangling one.
+//
+// This is the quarter-turn off the pack model. There, `dur` on preset N timed the
+// leg N->N+1 (outgoing), which only works while a preset appears once; rotate it
+// to mean the leg *into* N and the same preset can be arrived at three different
+// ways in one script. Packs keep their timing as the seed a default script is
+// derived from (scriptFromPack below), but the script is what actually plays.
+//
+//   script := step (';' step)*
+//   step   := ['*'] ('~' | '=') slot ['@' timing]      '~' lerp into, '=' cut to
+//   timing := dur ['/' dwell ['/' ease]]               after '~'
+//           | dwell                                    after '=' (nothing to time)
+//
+// e.g. ?script=*~2@8/60;~3@4  — loop between a 60s dwell on slot 2 and a 4s morph
+// to slot 3. Seconds are absolute: choreography is written in the units you think
+// in, and the `rate` knob scales the whole thing without touching the script.
+//
+// `~` glides, `=` snaps. The obvious sigil for "go to" was `>`, and it was built
+// that way first — but `>` is in the URL spec's query percent-encode set, so it
+// comes back as %3E on every single step and re-inflates the URL that compactQuery
+// exists to keep flat. `~` and `=` both survive raw. `>` is still accepted on the
+// way in, since it's what a hand-writer reaches for; encodeScript emits `~`.
+const DEFAULT_STEP_DUR = 8; // seconds, matching the pack default of 480 frames
+const STEP_RE = /^(\*)?([~=>])(\d+)(?:@(.*))?$/; // '>' is a legacy-friendly alias for '~'
+
+function parseScript(spec) {
+  const steps = [];
+  let loopFrom = 0;
+  for (const chunk of String(spec).split(';')) {
+    const s = chunk.trim();
+    if (!s) continue;
+    const m = STEP_RE.exec(s);
+    if (!m) continue;
+    const slot = Number(m[3]);
+    if (slot >= SLOT_COUNT) continue; // '>10' is out of the bank, not slot 1 plus junk
+    const cut = m[2] === '=';
+    const parts = (m[4] || '').split('/');
+    const num = (v, dflt) => {
+      const n = parseFloat(v);
+      return Number.isFinite(n) && n >= 0 ? n : dflt;
+    };
+    const step = { slot, cut, dur: 0, dwell: 0, ease: undefined };
+    if (cut) {
+      step.dwell = num(parts[0], 0);
+    } else {
+      step.dur = num(parts[0], DEFAULT_STEP_DUR);
+      step.dwell = num(parts[1], 0);
+      const e = (parts[2] || '').trim();
+      if (e && EASINGS[e]) step.ease = e;
+    }
+    if (m[1]) loopFrom = steps.length; // the '*' marks where the tail loop returns
+    steps.push(step);
+  }
+  return steps.length ? { steps, loopFrom: Math.min(loopFrom, steps.length - 1) } : null;
+}
+
+// Inverse of parseScript. Omits anything that is already the default, so a plain
+// morph cycle encodes as '>0;>1;>2' rather than as a wall of 8/0s.
+function encodeScript(sc) {
+  const n = (v) => Number(v.toFixed(3)).toString();
+  return sc.steps.map((st, i) => {
+    const head = (i === sc.loopFrom && sc.loopFrom !== 0 ? '*' : '') + (st.cut ? '=' : '~') + st.slot;
+    if (st.cut) return st.dwell ? `${head}@${n(st.dwell)}` : head;
+    let parts = [];
+    if (st.ease) parts = [n(st.dur), n(st.dwell), st.ease];
+    else if (st.dwell) parts = [n(st.dur), n(st.dwell)];
+    else if (st.dur !== DEFAULT_STEP_DUR) parts = [n(st.dur)];
+    return parts.length ? `${head}@${parts.join('/')}` : head;
+  }).join(';');
+}
+
+const stepSeconds = (st) => (st.cut ? 0 : st.dur) + st.dwell;
+
+// Steps before loopFrom are an intro played once; the rest cycle forever.
+function scriptLength(sc) {
+  const add = (a, b) => a + b;
+  const lens = sc.steps.map(stepSeconds);
+  const intro = lens.slice(0, sc.loopFrom).reduce(add, 0);
+  const loop = lens.slice(sc.loopFrom).reduce(add, 0);
+  return { intro, loop, total: intro + loop };
+}
+
+// Where playback is at `elapsed` wall-clock seconds: which step, whether it is
+// still moving or has arrived and is dwelling, and how far through that phase.
+// `rate` scales script time against wall time — 0.5 plays it half as fast.
+//
+// Pure, so the panel, a future scrub-able timeline and the tests all read the
+// same answer. What it deliberately does NOT say is what to lerp *from*: the
+// sketch snapshots the live values when the step changes, which is the only thing
+// that stays right across a loop back to the marker, a cleared slot, or a step
+// change caught mid-morph.
+function stepAt(sc, elapsed, rate) {
+  const r = Number.isFinite(rate) && rate > 0 ? rate : 1;
+  const lens = sc.steps.map(stepSeconds);
+  const { intro, loop } = scriptLength(sc);
+  let t = Math.max(0, elapsed) * r;
+  if (t >= intro) t = loop > 0 ? intro + ((t - intro) % loop) : intro;
+  let i = 0;
+  while (i < lens.length - 1 && t >= lens[i]) { t -= lens[i]; i += 1; }
+  const step = sc.steps[i];
+  const move = step.cut ? 0 : step.dur;
+  if (t < move) return { index: i, step, phase: 'move', progress: move > 0 ? t / move : 0 };
+  return {
+    index: i, step, phase: 'dwell',
+    progress: step.dwell > 0 ? Math.min(1, (t - move) / step.dwell) : 0,
+  };
+}
+
+// Where a step begins, in script seconds. Lets a slot pick during playback jump
+// the playhead to the moment that slot is arrived at, instead of restarting.
+function stepStart(sc, index) {
+  let t = 0;
+  for (let i = 0; i < index && i < sc.steps.length; i++) t += stepSeconds(sc.steps[i]);
+  return t;
+}
+
+const findStepForSlot = (sc, slot) => sc.steps.findIndex((st) => st.slot === slot);
+
+// The default script for a pack: its own per-leg timing, rotated. `dur` on the
+// PREVIOUS filled slot timed the leg out of it, which is the leg into this one;
+// `hold` was always the dwell here and stays put. The first slot takes its
+// arriving leg from the last, because the cycle wraps. Result: a pack plays
+// exactly as it did before scripts existed.
+function scriptFromPack(slots, legSeconds) {
+  const filled = [];
+  for (let i = 0; i < slots.length; i++) if (slots[i]) filled.push(i);
+  if (!filled.length) return null;
+  const steps = filled.map((slot, k) => {
+    const prev = slots[filled[(k - 1 + filled.length) % filled.length]];
+    return {
+      slot,
+      cut: false,
+      dur: legSeconds * (prev.dur == null ? 1 : prev.dur),
+      dwell: legSeconds * (slots[slot].hold || 0),
+      ease: prev.ease,
+    };
+  });
+  return { steps, loopFrom: 0 };
+}
+
 // --- query building -------------------------------------------------------
 // URLSearchParams percent-encodes every delimiter a pack spec is made of. Measured
 // on the shipped Weave pack: the ?packs= value is 178 characters of information
@@ -172,16 +316,17 @@ function encodePack(pk) {
 // then un-escape only these five. `&`, `=`, `+` and space stay encoded, because
 // those are what hold the query's own structure together. A value that literally
 // contains the characters "%3A" was encoded to "%253A" and doesn't match.
-const RAW_IN_QUERY = { '%3A': ':', '%2C': ',', '%3B': ';', '%40': '@', '%2F': '/' };
+// `=` is safe because only the FIRST `=` of a pair separates key from value —
+// URLSearchParams reads `script=~2@8/60` and `a=b=c` the same correct way.
+const RAW_IN_QUERY = {
+  '%3A': ':', '%2C': ',', '%3B': ';', '%40': '@', '%2F': '/', '%3D': '=', '%7E': '~',
+};
 const compactQuery = (params) =>
-  params.toString().replace(/%3A|%2C|%3B|%40|%2F/g, (m) => RAW_IN_QUERY[m]);
+  params.toString().replace(/%3A|%2C|%3B|%40|%2F|%3D|%7E/g, (m) => RAW_IN_QUERY[m]);
 
-// --- leg timing -----------------------------------------------------------
-// hold/dur are multiples of the panel's lerpDuration rather than absolute
-// seconds, so the lerpDuration knob scales a whole pack up or down while the
-// pack keeps its internal rhythm.
-const legDurFrames  = (p, lerpDuration) => Math.max(1, Math.round(lerpDuration * (p.dur == null ? 1 : p.dur)));
-const legHoldFrames = (p, lerpDuration) => Math.max(0, Math.round(lerpDuration * (p.hold || 0)));
+// --- easing lookup --------------------------------------------------------
+// Takes an object rather than a name, so a step, a preset or a bare { ease } all
+// go straight in and anything unrecognized lands on the default curve.
 const legEase = (p) => EASINGS[p.ease] || EASINGS[DEFAULT_EASE];
 
 // node only — the browser loads this as a classic script (module is undefined).
@@ -191,6 +336,7 @@ if (typeof module !== 'undefined' && module.exports) {
     filledCount, firstFilled, nextFilled, trimHoles,
     storeSlot, clearSlot, autoName, forkPack,
     parsePack, parseSlot, encodePack, compactQuery,
-    legDurFrames, legHoldFrames, legEase,
+    DEFAULT_STEP_DUR, parseScript, encodeScript, stepSeconds, scriptLength, stepAt, stepStart, findStepForSlot, scriptFromPack,
+    legEase,
   };
 }

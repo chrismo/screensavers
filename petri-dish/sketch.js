@@ -35,7 +35,6 @@ const angleStep = 5;
 const distStep = 1;
 const speedStep = 0.5;
 const fadeStep = 1;
-const lerpDurationStep = 60; // 1s @ 60fps
 const driftSpeedStep = 0.001;
 
 // EASINGS / DEFAULT_EASE, the pack spec codec and all the slot logic come from
@@ -67,16 +66,21 @@ const CLASSIC = [
 // so however the quick-picks are organized, a copied URL keeps reproducing
 // exactly what you saw.
 //
-// Per-leg lerp settings ride on the preset the leg *leaves*:
+// A pack also carries a default *rhythm*, as per-leg settings on the preset the
+// leg leaves:
 //   hold  dwell at this preset before starting the transition  (default 0)
 //   dur   length of the transition into the NEXT preset        (default 1)
 //   ease  curve for that transition, a key of EASINGS          (default smooth)
 //
-// hold/dur are multiples of the panel's lerpDuration rather than absolute
-// seconds, so the lerpDuration knob still scales a whole pack up or down while
-// the pack keeps its internal rhythm. Physarum needs a few seconds after a
-// param jump to re-knit, which is what `hold` buys: the mesh gets to actually
-// settle into a regime instead of being dragged straight through it.
+// These are multiples of PACK_LEG_SECONDS, so a pack describes its internal
+// rhythm as ratios and the `rate` knob scales the whole thing. They are no
+// longer what plays: scriptFromPack() rotates them into a script of steps (the
+// leg out of N is the leg *into* N+1), and the script is what draw() runs. Pack
+// timing is the seed; a ?script= overrides it entirely.
+//
+// `hold` matters more than it looks: physarum needs a few seconds after a param
+// jump to re-knit, which is what a dwell buys — the mesh gets to actually settle
+// into a regime instead of being dragged straight through it.
 const tune = (name, timing) =>
   Object.assign({}, CLASSIC.find((p) => p.name === name), timing);
 
@@ -146,21 +150,29 @@ const driftRanges = {
 const driftBias = { rotAngle: 0, sensorAngle: 0, sensorDist: 0, moldSpeed: 0, bgFade: 0 };
 const driftBiasDecay = 0.99;
 
-// --- lerp (cycle through the active pack's presets) ------------------------
-// Each cycle step is a *leg*: an optional hold at `lerpFrom`, then an eased
-// transition into `lerpTo`. Both phases are driven by the from-preset's
-// hold/dur/ease (see packs above), scaled by lerpDuration.
-let lerpMode = false;
-let lerpFrom = 0;
-let lerpTo = 1;
-let lerpT = 0;     // 0-1 through the transition
-let lerpHoldT = 0; // 0-1 through the hold that precedes it
-let lerpDuration = 480; // frames per unit-duration transition (~8s @ 60fps)
+// --- playback (run a script over the active pack's slots) ------------------
+// Playback is a *script*: an ordered list of steps, each "arrive at slot N — by
+// cut, or by lerp over `dur` seconds — then dwell `dwell` seconds", with a loop
+// marker. timeline.js owns the model; this half owns the clock and the pixels.
+//
+// With no ?script=, the active pack's own per-leg timing is rotated into an
+// equivalent script (scriptFromPack), so a pack plays exactly as it did before
+// scripts existed. A ?script= overrides that and is what copy-URL re-emits.
+let playing = false;
+let script = null;        // the script being played, derived or custom
+let scriptCustom = false; // true once a ?script= is in play — changes what C emits
+let scriptT = 0;          // wall-clock seconds since playback started
+let rate = 1;             // global speed multiplier; script seconds are absolute
+let stepIdx = -1;         // last step seen, so a change can snapshot moveFrom
+let nowAt = null;         // last stepAt() result, for the panel
+// What a lerp moves FROM: the live values at the moment the step changed. A
+// previous-step lookup can't answer this — the step before the loop marker is
+// one thing on the first pass and another on every loop after — and snapshotting
+// is also what keeps a step change caught mid-morph from jumping.
+const moveFrom = { rotAngle: 45, sensorAngle: 45, sensorDist: 10, moldSpeed: 1, bgFade: 5 };
 
-// timeline.js takes lerpDuration as an argument (it can't see this module's
-// live binding); these close over it so the call sites stay short.
-const legDur  = (p) => legDurFrames(p, lerpDuration);
-const legHold = (p) => legHoldFrames(p, lerpDuration);
+const PACK_LEG_SECONDS = 8; // the old lerpDuration default, 480 frames @ 60fps
+const rateStep = 0.25;
 
 // --- slot editing ---------------------------------------------------------
 // A pack is a bank of SLOT_COUNT slots and the panel always shows all ten, so
@@ -316,16 +328,16 @@ const PANEL_HTML = `
       <div id="v-preset-pills" class="preset-pills"></div>
 
       <h2>timing</h2>
-      ${paramRow('lerpDuration', 'lerpDuration', '')}
-      ${paramRow('driftSpeed',   'driftSpeed',   '')}
-      <div class="row wide"><span class="label">leg hold</span><span id="v-legHold" class="val"></span></div>
-      <div class="row wide"><span class="label">leg lerp</span><span id="v-legLerp" class="val"></span></div>
+      ${paramRow('rate',       'rate',       '')}
+      ${paramRow('driftSpeed',  'driftSpeed', '')}
+      <div class="row wide"><span id="v-step-label" class="label">step</span><span id="v-step" class="val accent"></span></div>
+      <div class="row wide"><span class="label">step timing</span><span id="v-stepTiming" class="val"></span></div>
 
       <h2>actions</h2>
       <div class="legend">
         <button class="kbd kbd-action" data-action="pack">B</button><div class="kbd-desc">next pack (⇧B back)</div>
         <button class="kbd kbd-action" data-action="drift">D</button><div class="kbd-desc">drift (perlin)</div>
-        <button class="kbd kbd-action" data-action="lerp">L</button><div class="kbd-desc">lerp (preset cycle)</div>
+        <button class="kbd kbd-action" data-action="lerp">L</button><div class="kbd-desc">play / stop the script</div>
         <span class="kbd-pair"><button class="kbd-btn kbd-action" data-action="store">S</button><button
           class="kbd-btn kbd-action" data-action="clear">X</button></span><div class="kbd-desc">store / clear slot, then pick</div>
         <button class="kbd kbd-action" data-action="reset">R</button><div class="kbd-desc">reset molds</div>
@@ -387,7 +399,8 @@ function setup() {
 //
 // Mode + panel:
 //   ?preset=N      apply preset N (0-9, within the active pack)
-//   ?lerp=1        start in lerp mode (preset cycle)
+//   ?script=SPEC   choreography over the slots (see parseScript in timeline.js)
+//   ?lerp=1        start playback on the pack's own default script
 //   ?drift=1       start in drift mode (perlin auto-morph)
 //   ?nopanel=1     skip the control drawer entirely
 //
@@ -400,7 +413,8 @@ function setup() {
 //
 // Speed knobs (apply regardless of mode):
 //   ?num=N           mold count (default 4000) — applied in setup() above
-//   ?lerpDuration=N  frames per lerp transition (default 480)
+//   ?rate=N          playback speed multiplier (default 1; 0.5 is half speed)
+//   ?lerpDuration=N  legacy alias for ?rate= (480 / N)
 //   ?driftSpeed=N    perlin step per frame (default 0.003)
 //
 // lerp wins over drift if both passed. Runtime overrides only stick in
@@ -437,12 +451,25 @@ function applyUrlParams(params) {
   setNum('sensorDist',   (v) => { sensorDist = v; });
   setNum('moldSpeed',    (v) => { moldSpeed = v; });
   setNum('bgFade',       (v) => { bgFade = v; });
-  setNum('lerpDuration', (v) => { lerpDuration = v; });
   setNum('driftSpeed',   (v) => { driftSpeed = v; });
+  setNum('rate',         (v) => { if (v > 0) rate = v; });
+  // Legacy: lerpDuration was frames-per-leg, so a longer one meant slower.
+  setNum('lerpDuration', (v) => { if (v > 0) rate = 480 / v; });
 
-  if (params.get('lerp') === '1') {
-    lerpMode = true;
-    restartLerpAt(presetIdx);
+  // setPack() builds the derived script, but a load with no ?pack= never calls it,
+  // which left ?lerp=1 playing nothing at all. Derive it here regardless.
+  rebuildScript();
+
+  // A ?script= replaces the pack-derived default and is what C re-emits.
+  const scriptParam = params.get('script');
+  if (scriptParam) {
+    const sc = parseScript(scriptParam);
+    if (sc) { script = sc; scriptCustom = true; }
+  }
+
+  if (params.get('lerp') === '1' || params.get('play') === '1' || scriptCustom) {
+    playing = true;
+    restartScript();
   } else if (params.get('drift') === '1') {
     drift = true;
   }
@@ -462,25 +489,22 @@ function draw() {
     moldSpeed   = driftValue('moldSpeed')   + driftBias.moldSpeed;
     bgFade      = driftValue('bgFade')      + driftBias.bgFade;
     for (const k in driftBias) driftBias[k] *= driftBiasDecay;
-  } else if (lerpMode && presets[lerpFrom] && presets[lerpTo]) {
-    // Hold at the from-preset first (if the pack asked for one), then run the
-    // eased transition. Both lengths come from the from-preset's own settings.
-    // Empty slots are skipped, so the cycle walks the filled ones only.
-    const hold = legHold(presets[lerpFrom]);
-    if (lerpHoldT < 1) lerpHoldT = hold > 0 ? Math.min(1, lerpHoldT + 1 / hold) : 1;
-    if (lerpHoldT < 1) {
-      setValues(presets[lerpFrom]);
-    } else {
-      lerpT += 1 / legDur(presets[lerpFrom]);
-      if (lerpT >= 1) {
-        lerpT = 0;
-        lerpHoldT = 0;
-        lerpFrom = lerpTo;
-        const nx = nextFilled(presets, lerpFrom);
-        lerpTo = nx < 0 ? lerpFrom : nx;
-        presetIdx = lerpFrom;
-      }
-      applyLerp(presets[lerpFrom], presets[lerpTo], lerpT);
+  } else if (playing && script) {
+    // Real seconds, not frames: a script says "60s" and means it. deltaTime is
+    // clamped because returning to a hidden tab hands back one enormous frame,
+    // which would otherwise teleport the playhead.
+    scriptT += Math.min(0.1, (deltaTime || 16.7) / 1000);
+    const at = stepAt(script, scriptT, rate);
+    nowAt = at;
+    if (at.index !== stepIdx) { snapshotInto(moveFrom); stepIdx = at.index; }
+    const target = presets[at.step.slot];
+    // A step can point at a slot that was cleared after the script was written.
+    // It still consumes its time — the choreography keeps its shape — but there
+    // is nothing to show, so the current values just stand.
+    if (target) {
+      if (at.phase === 'move') applyLerp(moveFrom, target, at.progress, at.step.ease);
+      else setValues(target);
+      presetIdx = at.step.slot;
     }
   }
 
@@ -503,6 +527,11 @@ function driftValue(param) {
   const r = driftRanges[param];
   return map(noise(driftT + r.offset), 0, 1, r.min, r.max);
 }
+
+const snapshotInto = (o) => {
+  o.rotAngle = rotAngle; o.sensorAngle = sensorAngle; o.sensorDist = sensorDist;
+  o.moldSpeed = moldSpeed; o.bgFade = bgFade;
+};
 
 function setValues(p) {
   rotAngle    = p.rotAngle;
@@ -529,9 +558,10 @@ function applyPreset(i) {
   presetIdx = i;
 }
 
-// The leg's easing belongs to the preset it leaves, so `a` picks the curve.
-function applyLerp(a, b, t) {
-  const e = legEase(a)(constrain(t, 0, 1));
+// The easing belongs to the step — the move into `b` — not to either endpoint,
+// which is the whole reason timing moved off the preset.
+function applyLerp(a, b, t, ease) {
+  const e = legEase({ ease })(constrain(t, 0, 1));
   rotAngle    = lerp(a.rotAngle,    b.rotAngle,    e);
   sensorAngle = lerp(a.sensorAngle, b.sensorAngle, e);
   sensorDist  = lerp(a.sensorDist,  b.sensorDist,  e);
@@ -549,7 +579,7 @@ function setPack(i, announce) {
   const start = Math.max(0, firstFilled(presets, 0)); // a pack can lead with holes
   applyPreset(start);
   presetIdx = start;
-  if (lerpMode) restartLerpAt(start);
+  rebuildScript();
   rebuildPresetPills();
   if (announce) window.flashToast?.(`pack: ${packs[packIdx].name}`);
 }
@@ -558,12 +588,32 @@ function cyclePack(dir) {
   setPack(packIdx + (dir < 0 ? -1 : 1), true);
 }
 
-function restartLerpAt(i) {
-  lerpFrom = presets[i] ? i : Math.max(0, firstFilled(presets, 0));
-  const nx = nextFilled(presets, lerpFrom);
-  lerpTo = nx < 0 ? lerpFrom : nx; // one filled slot: sit on it rather than cycle
-  lerpT = 0;
-  lerpHoldT = 0;
+// Re-derive the pack's default script. A hand-written ?script= wins and is left
+// alone — it may deliberately name slots this pack hasn't filled yet.
+function rebuildScript() {
+  if (scriptCustom) return;
+  script = scriptFromPack(presets, PACK_LEG_SECONDS);
+  restartScript();
+}
+
+function restartScript() {
+  scriptT = 0;
+  stepIdx = -1;
+  nowAt = null;
+  snapshotInto(moveFrom);
+}
+
+// A slot pick during playback moves the playhead to the moment that slot is
+// arrived at — skipping the move into it, since the point of pressing 3 is to
+// see slot 3 now. A slot no step mentions just applies, leaving playback alone.
+function seekToSlot(i) {
+  if (!script) return false;
+  const k = findStepForSlot(script, i);
+  if (k < 0) return false;
+  const st = script.steps[k];
+  scriptT = (stepStart(script, k) + (st.cut ? 0 : st.dur)) / (rate || 1);
+  stepIdx = -1;
+  return true;
 }
 
 const packSlug = (name) => String(name).toLowerCase().replace(/\s+/g, '-');
@@ -592,7 +642,7 @@ function adjustParam(name, dir) {
     ? max(0.1, moldSpeed - speedStep)
     : (moldSpeed < speedStep ? speedStep : moldSpeed + speedStep); // snap to grid from 0.1 floor
   else if (name === 'bgFade')      bgFade       = dir < 0 ? max(1, bgFade - fadeStep) : bgFade + fadeStep;
-  else if (name === 'lerpDuration') lerpDuration = dir < 0 ? max(60, lerpDuration - lerpDurationStep) : lerpDuration + lerpDurationStep;
+  else if (name === 'rate')         rate         = dir < 0 ? max(rateStep, rate - rateStep) : rate + rateStep;
   else if (name === 'driftSpeed')   driftSpeed   = dir < 0 ? max(0.0005, driftSpeed - driftSpeedStep) : driftSpeed + driftSpeedStep;
   toastParam(name);
 }
@@ -604,7 +654,7 @@ function toastParam(name) {
   else if (name === 'sensorDist')   msg = `sensorDist ${nf(sensorDist, 1, 1)}px`;
   else if (name === 'moldSpeed')    msg = `moldSpeed ${nf(moldSpeed, 1, 2)}×`;
   else if (name === 'bgFade')       msg = `bgFade ${nf(bgFade, 1, 1)}`;
-  else if (name === 'lerpDuration') msg = `lerpDuration ${nf(lerpDuration / 60, 1, 1)}s`;
+  else if (name === 'rate')         msg = `rate ${nf(rate, 1, 2)}×`;
   else if (name === 'driftSpeed')   msg = `driftSpeed ${nf(driftSpeed, 1, 4)}`;
   else return;
   window.flashToast?.(msg);
@@ -612,17 +662,20 @@ function toastParam(name) {
 
 function toggleDrift() {
   drift = !drift;
-  if (drift) lerpMode = false;
+  if (drift) playing = false;
   window.flashToast?.(`drift ${drift ? 'on' : 'off'}`);
 }
 
-function toggleLerp() {
-  lerpMode = !lerpMode;
-  if (lerpMode) {
+function togglePlay() {
+  playing = !playing;
+  if (playing) {
     drift = false;
-    restartLerpAt(presetIdx);
+    if (!script) rebuildScript();
+    restartScript();
+    if (!seekToSlot(presetIdx)) restartScript();
   }
-  window.flashToast?.(`lerp ${lerpMode ? 'on' : 'off'}`);
+  const n = script ? script.steps.length : 0;
+  window.flashToast?.(playing ? `play ${n} step${n === 1 ? '' : 's'}` : 'play off');
 }
 
 function resetMolds() {
@@ -642,7 +695,7 @@ function pickSlot(i) {
 function pickPreset(i) {
   if (!presets[i]) { window.flashToast?.(`slot ${slotLabel(i)} empty`); return; }
   applyPreset(i);
-  if (lerpMode) restartLerpAt(i);
+  if (playing) seekToSlot(i);
   window.flashToast?.(`preset ${slotLabel(i)}: ${presets[i].name}`);
 }
 
@@ -694,7 +747,8 @@ function storeIntoSlot(i) {
   const forking = !packs[packIdx].custom;
   const pk = editablePack();
   setSlots(pk, storeSlot(pk.presets, i, { rotAngle, sensorAngle, sensorDist, moldSpeed, bgFade }, CLASSIC));
-  if (!lerpMode && !drift) presetIdx = i; // so copy-URL diffs against what we just stored
+  if (!playing && !drift) presetIdx = i; // so copy-URL diffs against what we just stored
+  rebuildScript();
   rebuildPresetPills();
   flashPill(i);
   window.flashToast?.(`slot ${slotLabel(i)} = ${presets[i].name}` + (forking ? ` · forked to ${pk.name}` : ''));
@@ -709,6 +763,7 @@ function clearSlotAt(i) {
   const was = pk.presets[i].name;
   setSlots(pk, clearSlot(pk.presets, i));
   reseat();
+  rebuildScript();
   rebuildPresetPills();
   flashPill(i);
   window.flashToast?.(`slot ${slotLabel(i)} cleared (${was})` + (forking ? ` · forked to ${pk.name}` : ''));
@@ -719,7 +774,6 @@ function reseat() {
   const f = firstFilled(presets, 0);
   if (f < 0) return; // bank is empty; draw() and updateDom() both tolerate it
   if (!presets[presetIdx]) { presetIdx = f; applyPreset(f); }
-  if (lerpMode && (!presets[lerpFrom] || !presets[lerpTo])) restartLerpAt(presetIdx);
 }
 
 function flashPill(i) {
@@ -753,8 +807,11 @@ function shareUrl() {
 
   params.set('preset', String(presetIdx));
 
-  if (lerpMode) {
-    params.set('lerp', '1');
+  if (playing) {
+    // A hand-written script has to ride along in full; a derived one is just the
+    // pack's own timing, which ?pack= / ?packs= already carries.
+    if (scriptCustom && script) params.set('script', encodeScript(script));
+    else params.set('lerp', '1');
   } else if (drift) {
     params.set('drift', '1');
   } else {
@@ -771,7 +828,7 @@ function shareUrl() {
   }
 
   // Speed knobs / mold count apply regardless of mode.
-  if (!close(lerpDuration, 480))   params.set('lerpDuration', fmt(lerpDuration, 0));
+  if (!close(rate, 1))             params.set('rate',          fmt(rate, 3));
   if (!close(driftSpeed,   0.003)) params.set('driftSpeed',   fmt(driftSpeed, 5));
   if (num !== 4000)                params.set('num',          String(num));
 
@@ -830,7 +887,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'b') cyclePack(+1);
   else if (e.key === 'B') cyclePack(-1); // shift-B walks back
   else if (e.key === 'd' || e.key === 'D') toggleDrift();
-  else if (e.key === 'l' || e.key === 'L') toggleLerp();
+  else if (e.key === 'l' || e.key === 'L') togglePlay();
   else if (e.key === 'r' || e.key === 'R') resetMolds();
   else if (e.key === 'c' || e.key === 'C') copyShareUrl();
   else if (e.key === 'h' || e.key === 'H') toggleDrawer();
@@ -855,10 +912,11 @@ function setupDom() {
   dom.sensorDist   = document.getElementById('v-sensorDist');
   dom.moldSpeed    = document.getElementById('v-moldSpeed');
   dom.bgFade       = document.getElementById('v-bgFade');
-  dom.lerpDuration = document.getElementById('v-lerpDuration');
+  dom.rate         = document.getElementById('v-rate');
   dom.driftSpeed   = document.getElementById('v-driftSpeed');
-  dom.legHold      = document.getElementById('v-legHold');
-  dom.legLerp      = document.getElementById('v-legLerp');
+  dom.step         = document.getElementById('v-step');
+  dom.stepLabel    = document.getElementById('v-step-label');
+  dom.stepTiming   = document.getElementById('v-stepTiming');
   dom.mode         = document.getElementById('v-mode');
   dom.pack         = document.getElementById('v-pack');
   dom.preset       = document.getElementById('v-preset');
@@ -882,7 +940,7 @@ function setupDom() {
     const a = el.dataset.action;
     if      (a === 'pack')       cyclePack(+1);
     else if (a === 'drift')      toggleDrift();
-    else if (a === 'lerp')       toggleLerp();
+    else if (a === 'lerp')       togglePlay();
     else if (a === 'store')      arm('store');
     else if (a === 'clear')      arm('clear');
     else if (a === 'reset')      resetMolds();
@@ -919,31 +977,43 @@ function updateDom() {
   dom.sensorDist.textContent   = `${nf(sensorDist, 1, 1)}px`;
   dom.moldSpeed.textContent    = `${nf(moldSpeed, 1, 2)}×`;
   dom.bgFade.textContent       = nf(bgFade, 1, 1);
-  dom.lerpDuration.textContent = `${nf(lerpDuration / 60, 1, 1)}s`;
+  dom.rate.textContent         = `${nf(rate, 1, 2)}×`;
   dom.driftSpeed.textContent   = nf(driftSpeed, 1, 4);
 
-  // The leg rows describe the transition *out of* the preset we're sitting on.
-  // Every slot can be empty, so every read of one is a maybe.
-  const cycling = lerpMode && presets[lerpFrom] && presets[lerpTo];
-  const leg = presets[lerpMode ? lerpFrom : presetIdx];
-  dom.legHold.textContent = leg ? `${nf(legHold(leg) / 60, 1, 1)}s` : '—';
-  dom.legLerp.textContent = leg ? `${nf(legDur(leg) / 60, 1, 1)}s ${leg.ease || DEFAULT_EASE}` : '—';
+  // The step rows describe where playback is. Every slot can be empty and the
+  // script can be null, so every read of one is a maybe.
+  const running = playing && script && nowAt;
+  const st = running ? nowAt.step : null;
+  dom.step.textContent = running
+    ? `${nowAt.index + 1}/${script.steps.length} ${st.cut ? '=' : '~'}${slotLabel(st.slot)}` +
+      (script.loopFrom ? ` ↻${script.loopFrom + 1}` : '')
+    : (script ? `${script.steps.length} steps` : '—');
+  dom.stepTiming.textContent = st
+    ? (st.cut ? 'cut' : `${nf(st.dur, 1, 1)}s ${st.ease || DEFAULT_EASE}`) +
+      ` · ${nf(st.dwell, 1, 1)}s dwell`
+    : '—';
 
   let modeStr = 'manual';
   if (drift) modeStr = 'drift (perlin)';
-  else if (lerpMode) modeStr = !cycling ? 'lerp (no slots)'
-    : lerpHoldT < 1 ? `hold ${nf(lerpHoldT * 100, 1, 0)}%`
-    : `lerp ${nf(lerpT * 100, 1, 0)}%`;
+  else if (playing) modeStr = !running ? 'play (no slots)'
+    : `${nowAt.phase} ${nf(nowAt.progress * 100, 1, 0)}%`;
   if (armed) modeStr += ` · ${armed}?`;
   dom.mode.textContent = modeStr;
 
   dom.pack.textContent = packs[packIdx].name;
-  dom.preset.textContent = cycling
-    ? `${presets[lerpFrom].name} → ${presets[lerpTo].name}`
+  // The pack row's value column is ~11 characters wide, so the derived-vs-custom
+  // marker lives on this label instead, where one word says exactly the thing
+  // that matters: whether C will emit a ?script= or just ?lerp=1.
+  dom.stepLabel.textContent = scriptCustom ? 'script' : 'step';
+  dom.preset.textContent = running && nowAt.phase === 'move' && presets[st.slot]
+    ? `→ ${presets[st.slot].name}`
     : (presets[presetIdx]?.name || '—');
 
-  const activeIdx = lerpMode ? lerpFrom : presetIdx;
-  const targetIdx = cycling ? lerpTo : -1;
+  // The pill under the playhead is active; the one the next step lands on is the
+  // target, which is what makes the bank readable as a score while it runs.
+  const activeIdx = presetIdx;
+  const nextStep = running ? script.steps[(nowAt.index + 1) % script.steps.length] : null;
+  const targetIdx = nextStep && nextStep.slot !== activeIdx ? nextStep.slot : -1;
   for (let i = 0; i < dom.presetPills.children.length; i++) {
     const p = dom.presetPills.children[i];
     const filled = !!presets[i];

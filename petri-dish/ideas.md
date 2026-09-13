@@ -6,12 +6,13 @@ general output-fingerprinting idea) live in the repo-root
 
 ## Scripted playback — slots, steps, scripts
 
-**Status:** designed 2026-09-13. **Phase 1 (slots) built 2026-09-13** — see
-[`README.md`](README.md#slots) for what it does and
+**Status:** designed 2026-09-13. **Phases 1 (slots) and 2 (steps) built
+2026-09-13** — see [`README.md`](README.md#slots) and
+[`README.md#scripts`](README.md#scripts) for what they do, and
 [`timeline.js`](timeline.js) / [`timeline.test.mjs`](timeline.test.mjs) for the
-logic. Phases 2 (steps) and 3 (UI) are still open. This section is the whole
-design conversation compressed, so picking it up cold doesn't mean re-deriving
-it.
+logic. **Phase 3 (the editing UI) is the open one**, and until it lands a script
+can only be written by hand in the URL. This section is the whole design
+conversation compressed, so picking it up cold doesn't mean re-deriving it.
 
 ### The problem
 
@@ -158,29 +159,82 @@ palette you liked becomes impossible.
   reads `e.code`, so `⇧1` is identifiable (`e.key` for it is `!`, with no digit in
   it to test) and layout-robust; the keydown handler returns early on `e.shiftKey`
   and `storeIntoSlot` is unchanged. Putting it back is deleting that guard.
+- **The `reset` flag on a step.** Held since the design and still unbuilt, but
+  the precondition it was waiting on — "a script to try it against" — is now met.
+  The theory: the best issue #1 effects are *from-scratch* transients that a slow
+  lerp can't reproduce, because the field adapts continuously instead of starting
+  over. A `!` suffix on a step, calling what `R` does on entry, would settle it in
+  one viewing. This is the cheapest high-information thing left.
 - **Rename a slot.** Auto-names shipped as designed (`33x66x7`, or a base
   preset's name when all five params match it exactly). A rename would have to be
   a separate later gesture — prompting at store time interrupts the play→capture
   flow and is clunky on iPad.
 
-### Phase 2 — steps
+### Phase 2 — steps — BUILT 2026-09-13
 
 The rotation described above, plus:
 
-- Step kinds: `lerp to` and `cut to` (a 0s lerp, but worth naming).
-- A **`reset` flag** on a step — re-seed molds + clear canvas, what `R` does —
-  is **held, not scoped in** (2026-09-13). The theory is that the issue #1
-  effects are *from-scratch* transients a slow lerp can't reproduce, since the
-  field adapts continuously instead of starting over. Still untested. Revisit
-  once there's a script to try it against.
-- **Absolute seconds**, not multiples of `lerpDuration`. The multiplier
-  indirection is the wrong shape for choreography. Keep the knob as a **global
-  rate multiplier** (1.0x default) so "slow the whole thing down" survives.
-- **Loop = flat list + a loop-from marker** (one tail loop). Covers the
-  motivating example exactly. Nested blocks only if something later needs them.
-- URL form, roughly `?pack=weave&script=0 10s; >1 6s; 1 3s; loop: 2 60s; >3 4s`
+- ✅ Step kinds: `lerp to` (`~`) and `cut to` (`=`, a 0s lerp, but worth naming).
+- ✅ **Absolute seconds**, with `rate` as the global multiplier. The old
+  `lerpDuration` knob became `rate`; `?lerpDuration=N` maps to `480/N` so old
+  URLs still behave.
+- ✅ **Loop = flat list + a loop-from marker** (`*`), one tail loop.
+- ✅ URL form — settled as `?script==0@10;~1@6/3;*~2@8/60;~3@4`.
+- **`>` can't be the lerp sigil.** It was built that way first and the regression
+  run caught it: `>` is in the URL spec's query percent-encode set, so every step
+  came back `%3E` and re-inflated the URL `compactQuery` had just flattened. `~`
+  (glide) and `=` (snap) both survive raw; `>` is still read, never written. The
+  raw set also gained `=`, which is safe because only the *first* `=` of a pair
+  separates key from value.
+- ⛔ The **`reset` flag** is still **held**. It was the one bullet left out on
+  purpose: it was parked pending "a script to try it against", and there is now
+  one, but building it unasked is scope nobody chose. It is ~5 lines (a `!`
+  suffix on a step, calling what `R` does on step entry) and it is the obvious
+  next experiment — see Still open below.
 
-### Phase 3 — UI surface
+#### The doc contradicted itself about what a step is
+
+The model table says a step *fuses* the move and the dwell ("go to slot N, by cut
+or lerp, over T seconds; then dwell D seconds") and argues for it: fusing "the
+edge and the node so there's never a dangling transition". But the sketched URL
+form — `0 10s; >1 6s; 1 3s` — is *unfused*, with dwells and moves as separate
+steps.
+
+**Built fused.** The model table is the considered position; the URL was marked
+"roughly". Fusing is what makes the doc's own argument work: `>2@8/60` has to say
+how it arrives, so the transition can't dangle. It also halves the step count.
+
+#### What pack timing became
+
+Not deleted — **rotated, and demoted to a seed**. `scriptFromPack()` turns a
+pack's per-leg `hold`/`dur`/`ease` into a script (the leg *out of* N is the leg
+*into* N+1, and the first slot takes its arriving leg from the last, since the
+cycle wraps). A pack therefore plays exactly as it did before scripts existed,
+and every `?packs=...@hold/dur/ease` URL still works. A `?script=` overrides the
+derived one entirely and is what copy-URL re-emits.
+
+This is a better answer than dropping pack timing: the doc's objection was that
+timing-on-the-preset *can't express* a preset arrived at two different ways. It
+still can't — but it doesn't have to, because it is now only a default. Packs
+stay palettes-with-a-rhythm; scripts are the playback model.
+
+#### What a lerp moves *from*
+
+Not the previous step. The step before the loop marker is one thing on the first
+pass and another on every loop after, so a previous-step lookup has no single
+answer. The sketch **snapshots the live values when the step index changes**,
+which is also what keeps a step change caught mid-morph from jumping, and what
+makes a cleared slot harmless. `stepAt()` deliberately does not report a `from`.
+
+The cost: playback is not a pure function of `t`, so a Phase 3 scrub will be
+approximate across a seek. Revisit if the timeline strip needs exactness.
+
+### Phase 3 — UI surface — NEXT
+
+Nothing here is built. Playback runs and is fully described by the panel's
+`step` / `step timing` / `mode` rows, but a script can only be *written* by hand
+in the URL — which makes the strip-vs-list decision below the thing standing
+between scripts and actually using them.
 
 Two candidates. **A** is the conventional shape for a sequencer and the cheaper
 build; **B** needs to be seen before judging, and a static mock (real segment

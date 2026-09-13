@@ -23,13 +23,13 @@ on the left edge to open the drawer.
 | `S` / `X` | arm store / clear, then press `0`–`9` (or tap a pill) |
 | `B` / `⇧B`| next / previous preset pack         |
 | `D`       | toggle drift mode (perlin auto-morph) |
-| `L`       | toggle lerp mode (cycle through presets) |
+| `L`       | play / stop the script               |
 | `R`       | reset molds (re-seed at center, clear canvas) |
 | `C`       | copy a screensaver URL that reproduces the current state |
 | `H`       | show/hide control drawer            |
 | `Esc`     | cancel an armed store/clear         |
 
-`lerpDuration` and `driftSpeed` are panel-only (no key binding).
+`rate` and `driftSpeed` are panel-only (no key binding).
 
 ## Presets
 
@@ -93,7 +93,7 @@ what you saw.
 | `pulse`   | Plasma, Vermicelli, Honeycomb, Tube, Burlap, Slime   | mostly hold, short snappy legs — a slideshow of regimes |
 | `tide`    | a palindromic sensorDist sweep, 2px → 30px → 2px     | one knob swept end to end; steady linear breath |
 
-### Per-leg lerp settings
+### Per-leg timing — the pack's default rhythm
 
 Each preset carries the settings for the leg that *leaves* it:
 
@@ -103,13 +103,15 @@ Each preset carries the settings for the leg that *leaves* it:
 | `dur`   | length of the transition into the next preset  | `1`     |
 | `ease`  | curve: `linear`, `smooth`, `smoother`, `in`, `out` | `smooth` |
 
-`hold` and `dur` are **multiples of `lerpDuration`**, not absolute seconds, so
-the `lerpDuration` knob still scales a whole pack up or down while the pack
-keeps its internal rhythm. The panel's *leg hold* / *leg lerp* rows show the
-resolved seconds for the leg you're on.
+`hold` and `dur` are **multiples of 8 seconds**, not absolute, so a pack
+describes its rhythm as ratios and the `rate` knob scales the whole thing.
+
+These are no longer what plays. They are the seed: selecting a pack rotates them
+into a **script** (see below), and the script is what runs. A `?script=`
+overrides them entirely.
 
 `hold` matters more than it looks: physarum needs a few seconds after a param
-jump to re-knit, so a hold is what lets a mesh actually settle into a regime
+jump to re-knit, so a dwell is what lets a mesh actually settle into a regime
 instead of being dragged straight through it.
 
 ### Custom packs in the URL
@@ -135,6 +137,69 @@ invalidate the indexes. Omitted timing falls back to the defaults above.
 Pressing `C` while a custom pack is active re-emits the whole spec, so custom
 packs round-trip through copy-URL like everything else.
 
+## Scripts
+
+A pack is a palette. A **script** is the choreography over it — what plays when
+you press `L`.
+
+A script is a list of **steps**, and a step is one fused thing:
+
+> arrive at slot N — by **cut**, or by **lerp** over `dur` seconds — then
+> **dwell** there for `dwell` seconds.
+
+Fusing the move and the dwell is the point rather than a shortcut. A transition
+is an *edge*, and welding it to the node it arrives at means there is never a
+dangling one: every step says both how you get somewhere and how long you stay.
+It is also why timing can't live on the preset — "sudden or gradual" is a
+property of the move, not of the destination, so the same slot can be cut to in
+one step and slowly morphed into in another.
+
+```
+script := step (';' step)*
+step   := ['*'] ('~' | '=') slot ['@' timing]
+timing := dur ['/' dwell ['/' ease]]     after '~'
+        | dwell                          after '='   (a cut has nothing to time)
+```
+
+| piece | means |
+| ----- | ----- |
+| `~3`  | lerp into slot 3 over the default 8s, no dwell |
+| `~3@6`      | lerp in over 6s |
+| `~3@6/60`   | lerp in over 6s, then sit for 60s |
+| `~3@6/60/smoother` | …with that easing curve |
+| `=3@10`     | **cut** to slot 3 and sit for 10s |
+| `*`         | loop marker: steps before it play once, the rest cycle forever |
+
+So the motivating case — hold, morph, then loop between a long dwell and a quick
+move — is:
+
+```
+?script==0@10;~1@6/3;*~2@8/60;~3@4
+```
+
+Cut to slot 0 and hold 10s; morph to slot 1 over 6s and hold 3s; then loop
+forever between a 60s dwell on slot 2 and a 4s morph to slot 3.
+
+`~` glides and `=` snaps. The obvious sigil for "go to" is `>`, and it's still
+accepted if you type it — but `>` is in the URL spec's query percent-encode set,
+so it comes back as `%3E` on every step and re-inflates the URL. `~` and `=`
+survive raw, so that's what `C` writes.
+
+**Seconds are absolute.** A script says `60s` and means 60 seconds — the units
+you actually think in when choreographing. The `rate` knob is a global
+multiplier on top (`0.5` = half speed), so "slow the whole thing down" survives
+without every number in the script being relative to something.
+
+**Without a `?script=`**, the active pack's own per-leg timing is rotated into an
+equivalent script, so a pack plays exactly as it did before scripts existed. The
+panel's `step` row becomes `script` when a URL-supplied one is in play — which is
+also when `C` emits `?script=` rather than `?lerp=1`.
+
+Pressing `0`–`9` during playback moves the playhead to the moment that slot is
+arrived at, rather than restarting. A step pointing at a slot you later cleared
+still takes its time — the choreography keeps its shape — it just has nothing to
+show.
+
 ## URL params
 
 Applied in order: pack → preset → numeric overrides → mode → panel. The
@@ -148,7 +213,9 @@ table below is for hand-rolling.
 | `?packs=SPEC`    | define an ad-hoc pack inline and select it (see Packs) |
 | `?packname=S`    | name for the `?packs=` pack (default `Custom`)      |
 | `?preset=N`      | start on slot N (0–9), within the active pack       |
-| `?lerp=1`        | start in lerp mode (smoothly cycles all presets)    |
+| `?script=SPEC`   | choreography over the slots (see Scripts)           |
+| `?lerp=1`        | start playback on the pack's own default script     |
+| `?rate=N`        | playback speed multiplier (default 1; `0.5` is half speed) |
 | `?drift=1`       | start in drift mode (perlin auto-morph)             |
 | `?nopanel=1`     | hide the control drawer (recommended for screensaver) |
 | `?rotAngle=N`    | rotation step in degrees (default 45)               |
@@ -157,7 +224,7 @@ table below is for hand-rolling.
 | `?moldSpeed=N`   | per-frame movement (default 1.0)                    |
 | `?bgFade=N`      | per-frame trail-fade alpha 1–255 (default 5)        |
 | `?num=N`         | mold count (default 4000)                           |
-| `?lerpDuration=N`| frames per unit-duration lerp leg (default 480 = ~8s) |
+| `?lerpDuration=N`| legacy alias for `?rate=` (`480 / N`)               |
 | `?driftSpeed=N`  | perlin step per frame (default 0.003)               |
 
 `lerp` wins over `drift` if both passed. Runtime overrides

@@ -16,7 +16,8 @@ const {
   firstFilled, nextFilled, filledCount,
   storeSlot, clearSlot, autoName, forkPack,
   parsePack, encodePack, compactQuery,
-  legHoldFrames, legDurFrames, legEase,
+  legEase,
+  DEFAULT_STEP_DUR, parseScript, encodeScript, stepSeconds, scriptLength, stepAt, stepStart, findStepForSlot, scriptFromPack,
 } = T;
 
 // A minimal preset factory: the five params plus a name.
@@ -247,16 +248,6 @@ test('legEase falls back to the default curve on a missing or bogus name', () =>
   assert.equal(legEase({ ease: 'linear' }), EASINGS.linear);
 });
 
-test('leg frames scale by lerpDuration, with dur defaulting to 1 and hold to 0', () => {
-  assert.equal(legDurFrames({}, 480), 480);
-  assert.equal(legDurFrames({ dur: 1.5 }, 480), 720);
-  assert.equal(legHoldFrames({}, 480), 0);
-  assert.equal(legHoldFrames({ hold: 0.5 }, 480), 240);
-});
-
-test('legDurFrames never returns 0 — a 0-frame leg would divide by zero', () => {
-  assert.equal(legDurFrames({ dur: 0 }, 480), 1);
-});
 
 // --- query compaction -----------------------------------------------------
 
@@ -266,11 +257,22 @@ test('compactQuery leaves the pack spec delimiters raw', () => {
   assert.equal(compactQuery(p), 'packs=A:1,2,3,4,5;;B:6,7,8,9,10@0/1/out');
 });
 
-test('compactQuery keeps the structural characters escaped', () => {
+test('compactQuery keeps & escaped — it is what actually separates pairs', () => {
   const p = new URLSearchParams();
   p.set('packname', 'My Pack&x=1');
-  // & and = inside a value must stay %26 / %3D or they'd split the query
-  assert.equal(compactQuery(p), 'packname=My+Pack%26x%3D1');
+  // & must stay %26 or it would split the query into two params. `=` need not:
+  // only the FIRST `=` of a pair separates key from value, so a later one is
+  // just data — which is what lets a script's `=0` cut steps ride raw.
+  const q = compactQuery(p);
+  assert.equal(q, 'packname=My+Pack%26x=1');
+  assert.equal(new URLSearchParams(q).get('packname'), 'My Pack&x=1', 'still reparses');
+});
+
+test('compactQuery leaves a cut step readable, = and all', () => {
+  const p = new URLSearchParams();
+  p.set('script', '=0@10;~1@6/3;*~2@8/60');
+  assert.equal(compactQuery(p), 'script==0@10;~1@6/3;*~2@8/60');
+  assert.equal(new URLSearchParams(compactQuery(p)).get('script'), p.get('script'));
 });
 
 test('compactQuery round-trips through URLSearchParams unchanged', () => {
@@ -312,4 +314,172 @@ test('compactQuery takes a third off a real pack spec', () => {
   const after = compactQuery(p).length;
   assert.equal(after, 'packs='.length + spec.length, 'nothing left escaped');
   assert.ok(after <= before * 0.7, `expected <=70% of ${before}, got ${after}`);
+});
+
+// --- scripts: steps, loop, advancement ------------------------------------
+// A step FUSES the move and the dwell: "arrive at slot N — by cut, or by lerp
+// over `dur` seconds — then sit there for `dwell` seconds." That's the model
+// table in ideas.md, and the reason for it is that a transition is an edge: it
+// can't dangle if it's welded to the node it arrives at.
+
+test('parseScript reads a lerp step: slot, dur, dwell, ease', () => {
+  const s = parseScript('~3@6/60/smoother');
+  assert.equal(s.steps.length, 1);
+  assert.deepEqual(s.steps[0], { slot: 3, cut: false, dur: 6, dwell: 60, ease: 'smoother' });
+});
+
+test('parseScript reads a cut step, whose one number is the dwell', () => {
+  // a cut has no transition to time, so `@10` is 10s parked — not a 10s move
+  assert.deepEqual(parseScript('=0@10').steps[0], { slot: 0, cut: true, dur: 0, dwell: 10, ease: undefined });
+});
+
+test('parseScript defaults a bare step to a plain morph, no dwell', () => {
+  assert.deepEqual(parseScript('~1').steps[0], { slot: 1, cut: false, dur: DEFAULT_STEP_DUR, dwell: 0, ease: undefined });
+  assert.deepEqual(parseScript('=1').steps[0], { slot: 1, cut: true, dur: 0, dwell: 0, ease: undefined });
+});
+
+test('parseScript loops from step 0 unless a * marks another', () => {
+  assert.equal(parseScript('~0;~1;~2').loopFrom, 0);
+  assert.equal(parseScript('=0@10;~1@6/3;*~2@8/60;~3@4').loopFrom, 2);
+});
+
+test('parseScript skips a step it cannot read, marker and all', () => {
+  const s = parseScript('~0;nonsense;~9@2/1');
+  assert.equal(s.steps.length, 2);
+  assert.deepEqual(s.steps.map((x) => x.slot), [0, 9]);
+});
+
+test('parseScript rejects a slot outside the bank', () => {
+  assert.equal(parseScript('~10'), null, 'two digits is not slot 1 followed by junk');
+  assert.equal(parseScript('~-1'), null);
+  assert.equal(parseScript('~9').steps[0].slot, 9);
+});
+
+test('parseScript of nothing is null, not an empty script', () => {
+  assert.equal(parseScript(''), null);
+  assert.equal(parseScript(';;'), null);
+});
+
+test('parseScript still accepts > as an alias, and encodeScript normalizes it', () => {
+  // > is what a hand-writer reaches for, but it percent-encodes to %3E, so it is
+  // read and never written.
+  assert.deepEqual(parseScript('>3@6/60'), parseScript('~3@6/60'));
+  assert.equal(encodeScript(parseScript('>3@6/60')), '~3@6/60');
+});
+
+test('encodeScript is the inverse of parseScript', () => {
+  for (const spec of ['~0;~1;~2', '=0@10;~1@6/3;*~2@8/60;~3@4', '~3@6/60/smoother', '=2@1.5']) {
+    assert.equal(encodeScript(parseScript(spec)), spec, spec);
+  }
+});
+
+test('stepSeconds is move plus dwell, and a cut has no move', () => {
+  assert.equal(stepSeconds({ cut: false, dur: 6, dwell: 3 }), 9);
+  assert.equal(stepSeconds({ cut: true, dur: 6, dwell: 3 }), 3);
+});
+
+// The motivating example from ideas.md, fused: cut to 0 and hold 10s; morph to 1
+// over 6s and hold 3s; then loop between a 60s dwell on 2 and a 4s morph to 3.
+const EXAMPLE = parseScript('=0@10;~1@6/3;*~2@8/60;~3@4');
+
+test('scriptLength splits the play-once intro from the looping tail', () => {
+  assert.deepEqual(scriptLength(EXAMPLE), { intro: 19, loop: 72, total: 91 });
+});
+
+test('stepAt walks the intro, naming the step and the phase within it', () => {
+  const at = (t) => { const r = stepAt(EXAMPLE, t, 1); return [r.index, r.phase, r.progress]; };
+  assert.deepEqual(at(0),  [0, 'dwell', 0],   'a cut has no move phase to sit in');
+  assert.deepEqual(at(5),  [0, 'dwell', 0.5]);
+  assert.deepEqual(at(10), [1, 'move',  0]);
+  assert.deepEqual(at(13), [1, 'move',  0.5]);
+  assert.deepEqual(at(16), [1, 'dwell', 0]);
+  assert.deepEqual(at(19), [2, 'move',  0]);
+  assert.deepEqual(at(23), [2, 'move',  0.5]);
+  assert.deepEqual(at(27), [2, 'dwell', 0]);
+});
+
+test('stepAt loops back to the marker, not to the top', () => {
+  assert.equal(stepAt(EXAMPLE, 87, 1).index, 3, 'end of the 60s dwell');
+  const wrapped = stepAt(EXAMPLE, 91, 1); // intro 19 + loop 72
+  assert.equal(wrapped.index, 2, 'back to the * step, not step 0');
+  assert.equal(wrapped.phase, 'move');
+  assert.equal(wrapped.progress, 0);
+  assert.deepEqual([stepAt(EXAMPLE, 95, 1).index, stepAt(EXAMPLE, 95, 1).progress], [2, 0.5]);
+  assert.equal(stepAt(EXAMPLE, 19 + 72 * 5, 1).index, 2, 'still there many loops later');
+});
+
+test('stepAt scales everything by rate — under 1 is slower', () => {
+  assert.deepEqual([stepAt(EXAMPLE, 20, 1).index, stepAt(EXAMPLE, 20, 1).phase], [2, 'move']);
+  // at half speed, 20s of wall clock is only 10s of script
+  assert.deepEqual([stepAt(EXAMPLE, 20, 0.5).index, stepAt(EXAMPLE, 20, 0.5).phase], [1, 'move']);
+  assert.equal(stepAt(EXAMPLE, 5, 2).index, 1, '5s at 2x is 10s of script');
+});
+
+test('stepAt survives a script with no duration at all', () => {
+  const z = parseScript('=0;=1');
+  const r = stepAt(z, 5, 1);
+  assert.ok(r.index >= 0 && r.index < 2);
+  assert.ok(Number.isFinite(r.progress));
+});
+
+test('stepAt clamps a negative elapsed to the start', () => {
+  assert.equal(stepAt(EXAMPLE, -5, 1).index, 0);
+});
+
+// --- deriving a script from a pack's own timing ---------------------------
+// The quarter-turn from ideas.md: legacy `dur` on preset N times the leg N->N+1
+// (outgoing), so rotated to mean the leg *into* N it becomes a step. `hold` on N
+// was always the dwell at N, and stays put.
+
+test('scriptFromPack rotates outgoing legs into arriving ones', () => {
+  const slots = [
+    { name: 'A', hold: 0.8, dur: 1.8, ease: 'smoother' },
+    { name: 'B', hold: 0.6, dur: 2.0, ease: 'linear' },
+  ];
+  const s = scriptFromPack(slots, 8); // 8s per unit leg
+  assert.deepEqual(s.steps, [
+    // arriving at A takes B's outgoing leg, because the cycle wraps
+    { slot: 0, cut: false, dur: 16, dwell: 6.4, ease: 'linear' },
+    { slot: 1, cut: false, dur: 14.4, dwell: 4.8, ease: 'smoother' },
+  ]);
+  assert.equal(s.loopFrom, 0);
+});
+
+test('scriptFromPack skips holes and takes the leg from the previous filled slot', () => {
+  const slots = [{ name: 'A', dur: 1, hold: 0 }, null, { name: 'C', dur: 2, hold: 1 }];
+  const s = scriptFromPack(slots, 10);
+  assert.deepEqual(s.steps.map((x) => [x.slot, x.dur, x.dwell]), [[0, 20, 0], [2, 10, 10]]);
+});
+
+test('scriptFromPack defaults an untimed pack to even legs and no dwell', () => {
+  const s = scriptFromPack([{ name: 'A' }, { name: 'B' }], 8);
+  assert.deepEqual(s.steps.map((x) => [x.dur, x.dwell]), [[8, 0], [8, 0]]);
+});
+
+test('scriptFromPack of an empty bank is null', () => {
+  assert.equal(scriptFromPack([null, null], 8), null);
+});
+
+test('scriptFromPack of a single slot still yields a playable one-step script', () => {
+  const s = scriptFromPack([{ name: 'A', dur: 1, hold: 2 }], 8);
+  assert.deepEqual(s.steps.map((x) => [x.slot, x.dur, x.dwell]), [[0, 8, 16]]);
+});
+
+test('stepStart is where a step begins in script seconds', () => {
+  assert.equal(stepStart(EXAMPLE, 0), 0);
+  assert.equal(stepStart(EXAMPLE, 1), 10);
+  assert.equal(stepStart(EXAMPLE, 2), 19);
+  assert.equal(stepStart(EXAMPLE, 3), 87);
+});
+
+test('stepStart round-trips through stepAt', () => {
+  for (let i = 0; i < EXAMPLE.steps.length; i++) {
+    assert.equal(stepAt(EXAMPLE, stepStart(EXAMPLE, i), 1).index, i, `step ${i}`);
+  }
+});
+
+test('findStepForSlot finds the first step targeting a slot, or -1', () => {
+  assert.equal(findStepForSlot(EXAMPLE, 2), 2);
+  assert.equal(findStepForSlot(EXAMPLE, 0), 0);
+  assert.equal(findStepForSlot(EXAMPLE, 7), -1);
 });
