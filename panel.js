@@ -26,7 +26,10 @@ window.SS = window.SS || {};
   };
 
   // Fill `container` with numbered preset pills (1..9,0); onPick(i) on click.
+  // Clears first, so it can be re-called to re-pill a container when the set of
+  // presets changes under it (e.g. petri-dish switching preset packs).
   SS.presetPills = function (container, count, onPick) {
+    container.textContent = '';
     for (let i = 0; i < count; i++) {
       const pill = document.createElement('button');
       pill.className = 'pill';

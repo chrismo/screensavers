@@ -12,8 +12,9 @@ Algorithm: Jeff Jones (2010), "Characteristics of Pattern Formation and
 Evolution in Approximations of Physarum Transport Networks"
   https://uwe-repository.worktribe.com/output/980579
 
-Adds: keyboard + tap controls, 10 named presets, perlin auto-drift mode,
-preset-cycle lerp, mold reset, "commit"-based brightness shading.
+Adds: keyboard + tap controls, named presets grouped into swappable packs
+(each with its own per-leg lerp timing), perlin auto-drift mode, preset-cycle
+lerp, mold reset, "commit"-based brightness shading.
 */
 
 let molds = [];
@@ -33,11 +34,23 @@ const fadeStep = 1;
 const lerpDurationStep = 60; // 1s @ 60fps
 const driftSpeedStep = 0.001;
 
+// --- easing ----------------------------------------------------------------
+// Named curves a pack can pick per lerp leg. 'smooth' (smoothstep) is what the
+// cycle always used, so it stays the default.
+const EASINGS = {
+  linear:   (t) => t,
+  smooth:   (t) => t * t * (3 - 2 * t),
+  smoother: (t) => t * t * t * (t * (t * 6 - 15) + 10),
+  in:       (t) => t * t,
+  out:      (t) => t * (2 - t),
+};
+const DEFAULT_EASE = 'smooth';
+
 // --- presets ---------------------------------------------------------------
-// 0-9 each snapshot the full live config. Tuned to span the regimes
+// Each preset snapshots the full live config. The base ten span the regimes
 // discovered while playing: thin parallel highways, tight cells, sweeping
 // long-range networks, the chaotic-but-organized "tipping point" at 2px, etc.
-const presets = [
+const CLASSIC = [
   { name: 'Slime',         rotAngle: 45, sensorAngle: 45, sensorDist: 10, moldSpeed: 1.0, bgFade:  5 },
   { name: 'Cobweb',        rotAngle: 20, sensorAngle: 20, sensorDist: 20, moldSpeed: 1.0, bgFade:  5 },
   { name: 'Honeycomb',     rotAngle: 60, sensorAngle: 60, sensorDist:  8, moldSpeed: 1.0, bgFade:  5 },
@@ -49,6 +62,74 @@ const presets = [
   { name: 'Vermicelli',    rotAngle: 45, sensorAngle: 45, sensorDist:  2, moldSpeed: 1.0, bgFade:  5 },
   { name: 'Burlap',        rotAngle:  5, sensorAngle:  5, sensorDist:  4, moldSpeed: 0.6, bgFade:  1 },
 ];
+
+// --- packs -----------------------------------------------------------------
+// A *pack* is a named, ordered collection of presets — what the 0-9 keys and
+// the panel pills point at — bundled with the lerp timing for the legs between
+// them. Packs are pure navigation: copy-URL still encodes the full live state,
+// so however the quick-picks are organized, a copied URL keeps reproducing
+// exactly what you saw.
+//
+// Per-leg lerp settings ride on the preset the leg *leaves*:
+//   hold  dwell at this preset before starting the transition  (default 0)
+//   dur   length of the transition into the NEXT preset        (default 1)
+//   ease  curve for that transition, a key of EASINGS          (default smooth)
+//
+// hold/dur are multiples of the panel's lerpDuration rather than absolute
+// seconds, so the lerpDuration knob still scales a whole pack up or down while
+// the pack keeps its internal rhythm. Physarum needs a few seconds after a
+// param jump to re-knit, which is what `hold` buys: the mesh gets to actually
+// settle into a regime instead of being dragged straight through it.
+const tune = (name, timing) =>
+  Object.assign({}, CLASSIC.find((p) => p.name === name), timing);
+
+const packs = [
+  // The original ten at uniform timing — the cycle lerp has always had.
+  { name: 'Classic', presets: CLASSIC },
+
+  // The linear, networky end. Long dwells so each mesh finishes knitting, and
+  // slow smootherstep legs so the rebuild reads as a morph rather than a cut.
+  { name: 'Weave', presets: [
+    tune('Cobweb',     { hold: 0.8, dur: 1.8, ease: 'smoother' }),
+    tune('Highways',   { hold: 0.6, dur: 2.0, ease: 'smoother' }),
+    tune('Tube',       { hold: 1.0, dur: 1.5, ease: 'smooth'   }),
+    tune('Vermicelli', { hold: 0.8, dur: 2.0, ease: 'smoother' }),
+    tune('Burlap',     { hold: 1.2, dur: 1.6, ease: 'smoother' }),
+  ] },
+
+  // The soft, blobby end. Medium legs with the easing mixed on purpose, so the
+  // cycle breathes unevenly instead of metronoming.
+  { name: 'Bloom', presets: [
+    tune('Slime',     { hold: 0.4, dur: 1.2, ease: 'smooth'   }),
+    tune('Ooze',      { hold: 0.6, dur: 1.0, ease: 'out'      }),
+    tune('Plasma',    { hold: 0.3, dur: 1.4, ease: 'in'       }),
+    tune('Dendrite',  { hold: 0.8, dur: 1.2, ease: 'smoother' }),
+    tune('Honeycomb', { hold: 0.5, dur: 1.0, ease: 'smooth'   }),
+  ] },
+
+  // Contrast first: mostly hold, with short ease-out legs that move fast and
+  // land soft — a slideshow of regimes rather than a morph between them.
+  { name: 'Pulse', presets: [
+    tune('Plasma',     { hold: 0.6, dur: 0.3, ease: 'out' }),
+    tune('Vermicelli', { hold: 0.6, dur: 0.3, ease: 'out' }),
+    tune('Honeycomb',  { hold: 0.6, dur: 0.3, ease: 'out' }),
+    tune('Tube',       { hold: 0.6, dur: 0.3, ease: 'out' }),
+    tune('Burlap',     { hold: 0.6, dur: 0.3, ease: 'out' }),
+    tune('Slime',      { hold: 0.6, dur: 0.4, ease: 'out' }),
+  ] },
+
+  // One knob swept end to end: sensorDist from the chaotic 2px tipping point
+  // out to 30px long-range highways, everything else pinned at Slime's values.
+  // Palindromic so the wrap-around leg is just another step of the same sweep,
+  // and linear legs with no holds so the whole pack reads as one steady breath.
+  { name: 'Tide', presets: [2, 6, 12, 20, 30, 20, 12, 6].map((sensorDist) => ({
+    name: `${sensorDist}px`,
+    rotAngle: 45, sensorAngle: 45, sensorDist, moldSpeed: 1.0, bgFade: 5,
+    hold: 0, dur: 0.75, ease: 'linear',
+  })) },
+];
+let packIdx = 0;
+let presets = packs[0].presets; // active pack's presets; re-pointed by setPack
 let presetIdx = 0;
 
 // --- drift (perlin auto-morph) --------------------------------------------
@@ -68,12 +149,20 @@ const driftRanges = {
 const driftBias = { rotAngle: 0, sensorAngle: 0, sensorDist: 0, moldSpeed: 0, bgFade: 0 };
 const driftBiasDecay = 0.99;
 
-// --- lerp (cycle through presets) -----------------------------------------
+// --- lerp (cycle through the active pack's presets) ------------------------
+// Each cycle step is a *leg*: an optional hold at `lerpFrom`, then an eased
+// transition into `lerpTo`. Both phases are driven by the from-preset's
+// hold/dur/ease (see packs above), scaled by lerpDuration.
 let lerpMode = false;
 let lerpFrom = 0;
 let lerpTo = 1;
-let lerpT = 0;
-let lerpDuration = 480; // frames per transition (~8s @ 60fps)
+let lerpT = 0;     // 0-1 through the transition
+let lerpHoldT = 0; // 0-1 through the hold that precedes it
+let lerpDuration = 480; // frames per unit-duration transition (~8s @ 60fps)
+
+const legDurFrames  = (p) => Math.max(1, Math.round(lerpDuration * (p.dur == null ? 1 : p.dur)));
+const legHoldFrames = (p) => Math.max(0, Math.round(lerpDuration * (p.hold || 0)));
+const legEase = (p) => EASINGS[p.ease] || EASINGS[DEFAULT_EASE];
 
 // --- DOM panel handles ----------------------------------------------------
 // The control panel is injected from JS so the same sketch.js works locally
@@ -198,15 +287,19 @@ const PANEL_HTML = `
 
       <h2>mode</h2>
       <div class="row wide"><span class="label">mode</span><span id="v-mode" class="val accent"></span></div>
+      ${paramRow('pack', 'pack', 'B \u21e7B')}
       <div class="row wide"><span class="label">preset</span><span id="v-preset" class="val accent"></span></div>
       <div id="v-preset-pills" class="preset-pills"></div>
 
       <h2>timing</h2>
       ${paramRow('lerpDuration', 'lerpDuration', '')}
       ${paramRow('driftSpeed',   'driftSpeed',   '')}
+      <div class="row wide"><span class="label">leg hold</span><span id="v-legHold" class="val"></span></div>
+      <div class="row wide"><span class="label">leg lerp</span><span id="v-legLerp" class="val"></span></div>
 
       <h2>actions</h2>
       <div class="legend">
+        <button class="kbd kbd-action" data-action="pack">B</button><div class="kbd-desc">next pack (⇧B back)</div>
         <button class="kbd kbd-action" data-action="drift">D</button><div class="kbd-desc">drift (perlin)</div>
         <button class="kbd kbd-action" data-action="lerp">L</button><div class="kbd-desc">lerp (preset cycle)</div>
         <button class="kbd kbd-action" data-action="reset">R</button><div class="kbd-desc">reset molds</div>
@@ -259,10 +352,15 @@ function setup() {
 }
 
 // URL params for screensaver / shareable-link autoplay. Applied in order:
-// preset → numeric overrides → mode → panel.
+// pack → preset → numeric overrides → mode → panel.
+//
+// Pack selection:
+//   ?pack=NAME     select a built-in pack by slug (classic, weave, …) or index
+//   ?packs=SPEC    define an ad-hoc pack inline and select it (see parsePack)
+//   ?packname=S    name for the ?packs= pack (default "Custom")
 //
 // Mode + panel:
-//   ?preset=N      apply preset N (0-9) before overrides and mode
+//   ?preset=N      apply preset N (0-9, within the active pack)
 //   ?lerp=1        start in lerp mode (preset cycle)
 //   ?drift=1       start in drift mode (perlin auto-morph)
 //   ?nopanel=1     skip the control drawer entirely
@@ -282,6 +380,22 @@ function setup() {
 // lerp wins over drift if both passed. Runtime overrides only stick in
 // manual mode — drift and lerp continuously rewrite the same vars in draw().
 function applyUrlParams(params) {
+  // Pack first: it re-points what ?preset= and the 0-9 keys index into.
+  const packsParam = params.get('packs');
+  if (packsParam) {
+    const custom = parsePack(packsParam, params.get('packname'));
+    if (custom) {
+      packs.push(custom);
+      setPack(packs.length - 1);
+    }
+  } else {
+    const packParam = params.get('pack');
+    if (packParam !== null) {
+      const i = findPack(packParam);
+      if (i >= 0) setPack(i);
+    }
+  }
+
   const presetParam = params.get('preset');
   if (presetParam !== null) {
     const i = Number(presetParam);
@@ -302,9 +416,7 @@ function applyUrlParams(params) {
 
   if (params.get('lerp') === '1') {
     lerpMode = true;
-    lerpFrom = presetIdx;
-    lerpTo = (presetIdx + 1) % presets.length;
-    lerpT = 0;
+    restartLerpAt(presetIdx);
   } else if (params.get('drift') === '1') {
     drift = true;
   }
@@ -325,14 +437,23 @@ function draw() {
     bgFade      = driftValue('bgFade')      + driftBias.bgFade;
     for (const k in driftBias) driftBias[k] *= driftBiasDecay;
   } else if (lerpMode) {
-    lerpT += 1 / lerpDuration;
-    if (lerpT >= 1) {
-      lerpT = 0;
-      lerpFrom = lerpTo;
-      lerpTo = (lerpTo + 1) % presets.length;
-      presetIdx = lerpFrom;
+    // Hold at the from-preset first (if the pack asked for one), then run the
+    // eased transition. Both lengths come from the from-preset's own settings.
+    const hold = legHoldFrames(presets[lerpFrom]);
+    if (lerpHoldT < 1) lerpHoldT = hold > 0 ? Math.min(1, lerpHoldT + 1 / hold) : 1;
+    if (lerpHoldT < 1) {
+      setValues(presets[lerpFrom]);
+    } else {
+      lerpT += 1 / legDurFrames(presets[lerpFrom]);
+      if (lerpT >= 1) {
+        lerpT = 0;
+        lerpHoldT = 0;
+        lerpFrom = lerpTo;
+        lerpTo = (lerpTo + 1) % presets.length;
+        presetIdx = lerpFrom;
+      }
+      applyLerp(presets[lerpFrom], presets[lerpTo], lerpT);
     }
-    applyLerp(presets[lerpFrom], presets[lerpTo], lerpT);
   }
 
   background(0, bgFade);
@@ -355,6 +476,14 @@ function driftValue(param) {
   return map(noise(driftT + r.offset), 0, 1, r.min, r.max);
 }
 
+function setValues(p) {
+  rotAngle    = p.rotAngle;
+  sensorAngle = p.sensorAngle;
+  sensorDist  = p.sensorDist;
+  moldSpeed   = p.moldSpeed;
+  bgFade      = p.bgFade;
+}
+
 function applyPreset(i) {
   const p = presets[i];
   if (drift) {
@@ -366,26 +495,112 @@ function applyPreset(i) {
     driftBias.moldSpeed   = p.moldSpeed   - driftValue('moldSpeed');
     driftBias.bgFade      = p.bgFade      - driftValue('bgFade');
   } else {
-    rotAngle    = p.rotAngle;
-    sensorAngle = p.sensorAngle;
-    sensorDist  = p.sensorDist;
-    moldSpeed   = p.moldSpeed;
-    bgFade      = p.bgFade;
+    setValues(p);
   }
   presetIdx = i;
 }
 
+// The leg's easing belongs to the preset it leaves, so `a` picks the curve.
 function applyLerp(a, b, t) {
-  const ease = t * t * (3 - 2 * t); // smoothstep
-  rotAngle    = lerp(a.rotAngle,    b.rotAngle,    ease);
-  sensorAngle = lerp(a.sensorAngle, b.sensorAngle, ease);
-  sensorDist  = lerp(a.sensorDist,  b.sensorDist,  ease);
-  moldSpeed   = lerp(a.moldSpeed,   b.moldSpeed,   ease);
-  bgFade      = lerp(a.bgFade,      b.bgFade,      ease);
+  const e = legEase(a)(constrain(t, 0, 1));
+  rotAngle    = lerp(a.rotAngle,    b.rotAngle,    e);
+  sensorAngle = lerp(a.sensorAngle, b.sensorAngle, e);
+  sensorDist  = lerp(a.sensorDist,  b.sensorDist,  e);
+  moldSpeed   = lerp(a.moldSpeed,   b.moldSpeed,   e);
+  bgFade      = lerp(a.bgFade,      b.bgFade,      e);
+}
+
+// --- packs: selection, parsing, encoding ----------------------------------
+// Switch the active pack. Packs are navigation only, so this just re-points
+// the 0-9 keys / pills and restarts at the new pack's first preset.
+function setPack(i, announce) {
+  const n = packs.length;
+  packIdx = ((i % n) + n) % n;
+  presets = packs[packIdx].presets;
+  applyPreset(0);
+  if (lerpMode) restartLerpAt(0);
+  rebuildPresetPills();
+  if (announce) window.flashToast?.(`pack: ${packs[packIdx].name}`);
+}
+
+function cyclePack(dir) {
+  setPack(packIdx + (dir < 0 ? -1 : 1), true);
+}
+
+function restartLerpAt(i) {
+  lerpFrom = i;
+  lerpTo = (i + 1) % presets.length;
+  lerpT = 0;
+  lerpHoldT = 0;
+}
+
+const packSlug = (name) => String(name).toLowerCase().replace(/\s+/g, '-');
+
+// Resolve a ?pack= value: a slug/name match first, then a bare index.
+function findPack(v) {
+  const want = packSlug(v.trim());
+  const byName = packs.findIndex((pk) => packSlug(pk.name) === want);
+  if (byName >= 0) return byName;
+  const i = Number(v);
+  return Number.isInteger(i) && i >= 0 && i < packs.length ? i : -1;
+}
+
+// ?packs= grammar — a whole bank of presets carried in the URL, so a
+// "collection" is just a bookmark instead of an edit to this file:
+//
+//   spec   := preset (';' preset)*
+//   preset := [name ':'] rot ',' sensA ',' sensD ',' speed ',' fade ['@' timing]
+//   timing := hold '/' dur ['/' ease]
+//
+// e.g. ?packs=Fast:45,45,10,1,5@0/0.4/out;Slow:20,20,20,1,5@1/2/smoother
+// Anything unparseable is skipped rather than failing the whole pack, and only
+// the first 10 presets are kept (the pills / 0-9 keys top out there).
+function parsePack(spec, name) {
+  const out = [];
+  for (const chunk of spec.split(';')) {
+    const s = chunk.trim();
+    if (!s) continue;
+    const at = s.indexOf('@');
+    const head = at < 0 ? s : s.slice(0, at);
+    const colon = head.indexOf(':');
+    const nums = (colon < 0 ? head : head.slice(colon + 1)).split(',').map(Number);
+    if (nums.length < 5 || nums.some((n) => !Number.isFinite(n))) continue;
+    const p = {
+      name: (colon < 0 ? '' : head.slice(0, colon).trim()) || `P${out.length + 1}`,
+      rotAngle: nums[0], sensorAngle: nums[1], sensorDist: nums[2],
+      moldSpeed: nums[3], bgFade: nums[4],
+    };
+    if (at >= 0) {
+      const [h, dur, ease] = s.slice(at + 1).split('/');
+      const hv = parseFloat(h);
+      const dv = parseFloat(dur);
+      if (Number.isFinite(hv) && hv >= 0) p.hold = hv;
+      if (Number.isFinite(dv) && dv > 0) p.dur = dv;
+      if (ease && EASINGS[ease.trim()]) p.ease = ease.trim();
+    }
+    out.push(p);
+    if (out.length === 10) break;
+  }
+  return out.length ? { name: name || 'Custom', presets: out, custom: true } : null;
+}
+
+// Inverse of parsePack, for round-tripping a custom pack through copy-URL.
+function encodePack(pk) {
+  const fmt = (n, d) => Number(n.toFixed(d)).toString();
+  return pk.presets.map((p) => {
+    const nm = String(p.name || '').replace(/[;:@\/,]/g, ' ').trim();
+    const head = `${nm ? nm + ':' : ''}${fmt(p.rotAngle, 2)},${fmt(p.sensorAngle, 2)},` +
+      `${fmt(p.sensorDist, 2)},${fmt(p.moldSpeed, 3)},${fmt(p.bgFade, 1)}`;
+    if (p.hold == null && p.dur == null && !p.ease) return head;
+    return `${head}@${fmt(p.hold || 0, 3)}/${fmt(p.dur == null ? 1 : p.dur, 3)}/${p.ease || DEFAULT_EASE}`;
+  }).join(';');
 }
 
 // --- action handlers (shared by keyboard and tap UI) ----------------------
 function adjustParam(name, dir) {
+  // `pack` isn't a number, but riding the −/+ row keeps the panel uniform and
+  // gets hold-to-repeat for free; it toasts its own message.
+  if (name === 'pack') { cyclePack(dir); return; }
   if (name === 'rotAngle')         rotAngle    += dir * angleStep;
   else if (name === 'sensorAngle') sensorAngle += dir * angleStep;
   else if (name === 'sensorDist')  sensorDist   = dir < 0 ? max(1, sensorDist - distStep) : sensorDist + distStep;
@@ -421,9 +636,7 @@ function toggleLerp() {
   lerpMode = !lerpMode;
   if (lerpMode) {
     drift = false;
-    lerpFrom = presetIdx;
-    lerpTo = (presetIdx + 1) % presets.length;
-    lerpT = 0;
+    restartLerpAt(presetIdx);
   }
   window.flashToast?.(`lerp ${lerpMode ? 'on' : 'off'}`);
 }
@@ -436,26 +649,31 @@ function resetMolds() {
 
 function pickPreset(i) {
   applyPreset(i);
-  if (lerpMode) {
-    lerpFrom = i;
-    lerpTo = (i + 1) % presets.length;
-    lerpT = 0;
-  }
+  if (lerpMode) restartLerpAt(i);
   window.flashToast?.(`preset ${(i + 1) % 10}: ${presets[i].name}`);
 }
 
-// Build a screensaver-friendly URL that reproduces the current panel state
-// and copy it to the clipboard. Only emits params that differ from preset
-// defaults — keeps the URL readable.
-function copyShareUrl() {
-  if (!navigator.clipboard) return;
-
+// Build a screensaver-friendly URL that reproduces the current panel state.
+// Only emits params that differ from preset defaults — keeps the URL readable.
+function shareUrl() {
   const close = (a, b) => Math.abs(a - b) < 1e-6;
   // Round through toFixed → Number to drop FP noise and trailing zeros.
   const fmt = (n, d) => Number(n.toFixed(d)).toString();
 
   const params = new URLSearchParams();
   params.set('nopanel', '1');
+
+  // Packs are navigation, but the 0-9 slots have to mean the same thing on the
+  // other end for ?preset= to land — so the pack rides along too. An ad-hoc
+  // ?packs= pack is re-emitted in full, since there's nothing to name it by.
+  const pk = packs[packIdx];
+  if (pk.custom) {
+    params.set('packs', encodePack(pk));
+    if (pk.name !== 'Custom') params.set('packname', pk.name);
+  } else if (packIdx !== 0) {
+    params.set('pack', packSlug(pk.name));
+  }
+
   params.set('preset', String(presetIdx));
 
   if (lerpMode) {
@@ -481,8 +699,12 @@ function copyShareUrl() {
 
   const url = new URL(location.pathname, location.href);
   url.search = params.toString();
+  return url.toString();
+}
 
-  navigator.clipboard.writeText(url.toString()).then(() => {
+function copyShareUrl() {
+  if (!navigator.clipboard) return;
+  navigator.clipboard.writeText(shareUrl()).then(() => {
     const desc = document.getElementById('copy-desc');
     if (!desc) return;
     const orig = desc.textContent;
@@ -517,6 +739,8 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === '=')          adjustParam('moldSpeed', +1);
   else if (e.key === ',')          adjustParam('bgFade', -1);
   else if (e.key === '.')          adjustParam('bgFade', +1);
+  else if (e.key === 'b') cyclePack(+1);
+  else if (e.key === 'B') cyclePack(-1); // shift-B walks back
   else if (e.key === 'd' || e.key === 'D') toggleDrift();
   else if (e.key === 'l' || e.key === 'L') toggleLerp();
   else if (e.key === 'r' || e.key === 'R') resetMolds();
@@ -536,11 +760,14 @@ function setupDom() {
   dom.bgFade       = document.getElementById('v-bgFade');
   dom.lerpDuration = document.getElementById('v-lerpDuration');
   dom.driftSpeed   = document.getElementById('v-driftSpeed');
+  dom.legHold      = document.getElementById('v-legHold');
+  dom.legLerp      = document.getElementById('v-legLerp');
   dom.mode         = document.getElementById('v-mode');
+  dom.pack         = document.getElementById('v-pack');
   dom.preset       = document.getElementById('v-preset');
   dom.presetPills  = document.getElementById('v-preset-pills');
 
-  window.SS.presetPills(dom.presetPills, presets.length, pickPreset);
+  rebuildPresetPills();
 
   const toggle = document.getElementById('drawer-toggle');
   toggle.addEventListener('click', () => {
@@ -556,7 +783,8 @@ function setupDom() {
     const el = e.target.closest('[data-action]');
     if (!el) return;
     const a = el.dataset.action;
-    if      (a === 'drift')      toggleDrift();
+    if      (a === 'pack')       cyclePack(+1);
+    else if (a === 'drift')      toggleDrift();
     else if (a === 'lerp')       toggleLerp();
     else if (a === 'reset')      resetMolds();
     else if (a === 'copy')       copyShareUrl();
@@ -573,6 +801,13 @@ function setupDom() {
 
 const toggleDrawer = window.SS.toggleDrawer;
 
+// Packs vary in length, so the pills are rebuilt (not just relabeled) whenever
+// the active pack changes. No-op until the panel exists (?nopanel=1).
+function rebuildPresetPills() {
+  if (!dom.presetPills) return;
+  window.SS.presetPills(dom.presetPills, presets.length, pickPreset);
+}
+
 function updateDom() {
   if (!dom.rotAngle) return; // panel was suppressed via ?nopanel=1
   dom.rotAngle.textContent     = `${nf(rotAngle, 1, 1)}°`;
@@ -583,11 +818,19 @@ function updateDom() {
   dom.lerpDuration.textContent = `${nf(lerpDuration / 60, 1, 1)}s`;
   dom.driftSpeed.textContent   = nf(driftSpeed, 1, 4);
 
+  // The leg rows describe the transition *out of* the preset we're sitting on.
+  const leg = presets[lerpMode ? lerpFrom : presetIdx] || presets[0];
+  dom.legHold.textContent = `${nf(legHoldFrames(leg) / 60, 1, 1)}s`;
+  dom.legLerp.textContent = `${nf(legDurFrames(leg) / 60, 1, 1)}s ${leg.ease || DEFAULT_EASE}`;
+
   let modeStr = 'manual';
   if (drift) modeStr = 'drift (perlin)';
-  else if (lerpMode) modeStr = `lerp ${nf(lerpT * 100, 1, 0)}%`;
+  else if (lerpMode) modeStr = lerpHoldT < 1
+    ? `hold ${nf(lerpHoldT * 100, 1, 0)}%`
+    : `lerp ${nf(lerpT * 100, 1, 0)}%`;
   dom.mode.textContent = modeStr;
 
+  dom.pack.textContent = packs[packIdx].name;
   dom.preset.textContent = lerpMode
     ? `${presets[lerpFrom].name} → ${presets[lerpTo].name}`
     : presets[presetIdx].name;

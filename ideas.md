@@ -7,6 +7,15 @@ ideas live in that sketch's own notes (e.g. `knights/ideas.md`).
 
 ## Preset banks / URL-carried presets
 
+**Built in petri-dish (2026-09) as "packs"** — see
+[`petri-dish/README.md`](petri-dish/README.md). What shipped there: built-in
+named packs + `B` / `⇧B` + `?pack=`, the URL-carried bank as `?packs=` (which
+round-trips through copy-URL), and — beyond the sketch below — **per-leg lerp
+settings** (`hold` / `dur` / `ease` on each preset, as multiples of
+`lerpDuration`), which is what makes a pack a rhythm rather than just a list.
+The notes below stand as the design rationale, and as the spec for the parts
+still open: generalizing into `panel.js` and giving knights the same thing.
+
 Applies to any sketch that has presets **and** a state-encoding "copy screensaver
 URL" (knights, petri-dish, …).
 
@@ -39,8 +48,14 @@ note: some sketches are light on shortcuts (knights) vs. heavy (petri-dish has
 many) — there's room to grow more fine-tuned per-sketch controls, and a bank
 hotkey is a natural first one.
 
-(Noted 2026-06-12; not needed now — captured for if/when collecting presets
-becomes a thing.)
+**Still open after petri-dish:** the pack machinery lives in `petri-dish/sketch.js`
+(only `SS.presetPills` re-pilling moved into `panel.js`). Lifting the
+select/cycle/parse/encode half into `panel.js` — sketch supplies the field list
+and its preset-spec codec — is what would give knights and comet packs for free.
+Per-leg timing is petri-dish-specific for now: knights has presets but no lerp
+between them, so a pack there is a bank without legs.
+
+(Noted 2026-06-12; petri-dish implementation 2026-09.)
 
 ## Pattern taxonomy / output fingerprinting
 
