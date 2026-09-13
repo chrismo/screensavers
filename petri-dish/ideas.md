@@ -124,12 +124,12 @@ palette you liked becomes impossible.
 
 The rotation described above, plus:
 
-- Step kinds: `lerp to`, `cut to` (a 0s lerp, but worth naming), and a
-  **`reset` flag** — re-seed molds + clear canvas, what `R` does. Needed because
-  the issue #1 effects are *from-scratch* transients: a slow lerp into the same
-  numbers probably won't reproduce them, since the field adapts continuously
-  instead of starting over. **Untested theory — worth 30 seconds to confirm
-  before it drives the design.**
+- Step kinds: `lerp to` and `cut to` (a 0s lerp, but worth naming).
+- A **`reset` flag** on a step — re-seed molds + clear canvas, what `R` does —
+  is **held, not scoped in** (2026-09-13). The theory is that the issue #1
+  effects are *from-scratch* transients a slow lerp can't reproduce, since the
+  field adapts continuously instead of starting over. Still untested. Revisit
+  once there's a script to try it against.
 - **Absolute seconds**, not multiples of `lerpDuration`. The multiplier
   indirection is the wrong shape for choreography. Keep the knob as a **global
   rate multiplier** (1.0x default) so "slow the whole thing down" survives.
@@ -167,11 +167,27 @@ run headless for screensaver use.
 - **JSON payload in the URL** — `{`, `}`, `"`, `,`, `:` all percent-encode; a
   6-step script becomes 1500+ chars of `%7B%22`. Base64 fixes the size and kills
   hand-editability, which was most of the point.
-- **External JSON file fetched at runtime** — breaks `file://` double-click
-  (opaque origin, CORS blocks `fetch`), which collides with this repo's loading
-  convention. If a big curated payload is ever wanted, the answer is a
-  `scripts.js` loaded via `<script src>` like `panel.js` — JSON ergonomics
-  without the fetch. (The `file://` fetch claim is ~90% confidence, untested.)
+- **External JSON file fetched at runtime** — breaks `file://` double-click,
+  which collides with this repo's loading convention. **Measured 2026-09-13**,
+  headless Chrome on a `file://` page in the same directory as the target:
+
+  ```
+  [log] SCRIPT-TAG: loaded ok
+  [log] FETCH: FAILED -> Failed to fetch
+  [log] XHR: FAILED
+  Access to fetch at 'file:///…/data.json' from origin 'null' has been blocked
+  by CORS policy: Cross origin requests are only supported for protocol
+  schemes: chrome, chrome-extension, chrome-untrusted, data, http, https,
+  isolated-app.
+  ```
+
+  A `file://` document has an **opaque origin** (`null`), so `fetch` and `XHR`
+  to a sibling file are both refused — while `<script src>` in the same page
+  loads fine, which is exactly why the vendored `p5.min.js` / `three.min.js`
+  work on a double-click. So the rule for this project is general: **runtime
+  `fetch` of any local asset is off the table, `<script src>` is not.** If a big
+  curated payload is ever wanted, the answer is a `scripts.js` loaded via
+  `<script src>` like `panel.js` — JSON ergonomics without the fetch.
 - **Compacting slots on clear** — see Holes above.
 
 ### Gotchas found while designing
@@ -186,11 +202,54 @@ run headless for screensaver use.
   inflation — about 120 chars of actual information. Those characters are legal
   in a query per RFC 3986; building that one param by hand keeps `:;,@` raw and
   roughly thirds the length. Worth doing before script URLs make it hurt.
-- **No test harness exists.** There's no `package.json`, no test directory, and
-  no assertions anywhere. Verification for the packs work was headless probing
-  via [`../tools/shot.mjs`](../tools/shot.mjs) — load a URL, evaluate an
-  expression, read back state as JSON. That's the tool to reach for here too;
-  a real harness is a separate question nobody has asked for yet.
+- **`node --test <dir>` with an absolute path fails** ("Cannot find module") —
+  it tries to load the directory as an entry point. `node --test <file>`, and a
+  bare `node --test` that discovers from the cwd, both work.
+
+### Testing
+
+Decided 2026-09-13: this is complex enough to warrant a suite, **scoped to the
+logic and nothing else**. This project has worked precisely because verification
+is "look at it" — golden-master screenshots would trade that away for
+maintenance, and they're explicitly not wanted.
+
+**Tested** — pure, deterministic, no DOM / canvas / p5:
+
+- script DSL parse ↔ encode round-trip
+- step advancement: given a script and elapsed frames, which step, which phase
+  (dwell vs. transition), and `t` within it
+- slot semantics: store, clear-leaves-a-hole, fork-on-first-write, index
+  stability across a clear
+- pack spec parse ↔ encode round-trip — a **retrofit**, since `parsePack` /
+  `encodePack` shipped with no tests at all
+- easing curves (trivial, but free)
+
+**Not tested** — anything a person answers by looking: whether a pattern is
+interesting, panel layout, the mold field itself. Those stay visual, via
+[`../tools/shot.mjs`](../tools/shot.mjs) probes when a headless check is useful.
+
+**How: follow the `knights/solver.js` precedent**, which already solved this
+exact problem in this repo. That file is pure logic with no DOM and no canvas,
+loaded by the browser as a classic `<script src>` (so `file://` double-click
+still works — top-level decls become globals the sketch uses) with a CommonJS
+tail guarded by `typeof module !== 'undefined'` that node imports. The offline
+miner in `knights/explore/` consumes it that way today.
+
+`petri-dish/sketch.js` can't be loaded in node at all as it stands — verified:
+
+```
+ReferenceError: window is not defined
+  at petri-dish/sketch.js:273   const paramRow = (label, param, hint) => window.SS.paramRow(...)
+```
+
+...because `PANEL_HTML` is a top-level template literal that calls `paramRow()`
+during evaluation. So the timeline logic needs extracting regardless of testing;
+testing just makes it urgent. Call it **`petri-dish/timeline.js`** — not
+`script.js`, which collides with both `sketch.js` and the `script` concept.
+
+Runner: node's built-in one. `node --test`, `.test.mjs` files, **zero
+dependencies and no `package.json`** — which matters in a repo that has neither
+and shouldn't grow one for this. Verified working on node v24.3.0.
 
 ### Loose end
 
