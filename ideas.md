@@ -55,6 +55,11 @@ and its preset-spec codec — is what would give knights and comet packs for fre
 Per-leg timing is petri-dish-specific for now: knights has presets but no lerp
 between them, so a pack there is a bank without legs.
 
+**Superseded in part:** the follow-on design in
+[`petri-dish/ideas.md`](petri-dish/ideas.md) moves per-leg timing off the preset
+and onto a *step*, because timing-on-the-preset breaks as soon as a preset is
+referenced more than once. Read that before extending packs anywhere else.
+
 (Noted 2026-06-12; petri-dish implementation 2026-09.)
 
 ## Pattern taxonomy / output fingerprinting

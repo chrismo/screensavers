@@ -120,6 +120,11 @@ table below is for hand-rolling.
 (`rotAngle`–`bgFade`) only stick in manual mode — drift and lerp
 continuously rewrite the same vars in `draw()`.
 
+## Ideas / deferred work
+
+Petri-dish backlog — including the designed-but-unbuilt **scripted playback**
+(slots / steps / scripts) — lives in [`ideas.md`](ideas.md).
+
 ## License
 
 CC BY-NC-SA 4.0 — see [LICENSE](LICENSE). Forced by the upstream Patt
