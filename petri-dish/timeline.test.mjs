@@ -15,7 +15,7 @@ const {
   SLOT_COUNT, EASINGS, DEFAULT_EASE,
   firstFilled, nextFilled, filledCount,
   storeSlot, clearSlot, autoName, forkPack,
-  parsePack, encodePack,
+  parsePack, encodePack, compactQuery,
   legHoldFrames, legDurFrames, legEase,
 } = T;
 
@@ -256,4 +256,60 @@ test('leg frames scale by lerpDuration, with dur defaulting to 1 and hold to 0',
 
 test('legDurFrames never returns 0 — a 0-frame leg would divide by zero', () => {
   assert.equal(legDurFrames({ dur: 0 }, 480), 1);
+});
+
+// --- query compaction -----------------------------------------------------
+
+test('compactQuery leaves the pack spec delimiters raw', () => {
+  const p = new URLSearchParams();
+  p.set('packs', 'A:1,2,3,4,5;;B:6,7,8,9,10@0/1/out');
+  assert.equal(compactQuery(p), 'packs=A:1,2,3,4,5;;B:6,7,8,9,10@0/1/out');
+});
+
+test('compactQuery keeps the structural characters escaped', () => {
+  const p = new URLSearchParams();
+  p.set('packname', 'My Pack&x=1');
+  // & and = inside a value must stay %26 / %3D or they'd split the query
+  assert.equal(compactQuery(p), 'packname=My+Pack%26x%3D1');
+});
+
+test('compactQuery round-trips through URLSearchParams unchanged', () => {
+  const p = new URLSearchParams();
+  p.set('packs', 'we ird:1,2,3,4,5@0.5/1.5/smoother;;X:9,8,7,6,5');
+  p.set('packname', 'Weave*');
+  p.set('preset', '3');
+  const back = new URLSearchParams(compactQuery(p));
+  for (const k of ['packs', 'packname', 'preset']) assert.equal(back.get(k), p.get(k), k);
+});
+
+test('compactQuery survives the URL.search setter without re-encoding', () => {
+  const p = new URLSearchParams();
+  p.set('packs', 'A:1,2,3,4,5@0/1/out');
+  const u = new URL('https://example.com/petri-dish/');
+  u.search = compactQuery(p);
+  assert.equal(u.search, '?packs=A:1,2,3,4,5@0/1/out');
+  assert.equal(new URLSearchParams(u.search).get('packs'), p.get('packs'));
+});
+
+test('compactQuery does not unescape a value that literally contains "%3A"', () => {
+  const p = new URLSearchParams();
+  p.set('packname', '%3A'); // the user's actual five characters, not a colon
+  assert.equal(compactQuery(p), 'packname=%253A');
+  assert.equal(new URLSearchParams(compactQuery(p)).get('packname'), '%3A');
+});
+
+// Measured against the shipped Weave pack, so the number means something: the
+// ?packs= param goes 266 -> 178 characters, a third off, and none of the 178 is
+// escaping. (The whole URL is a 24% cut — the other params barely inflate.)
+test('compactQuery takes a third off a real pack spec', () => {
+  const spec = encodePack(parsePack(
+    'Cobweb:20,20,20,1,5@0.8/1.8/smoother;Highways:30,30,30,2,5@0.6/2/smoother;' +
+    'Tube:12,95,60,2,2@1/1.5/smooth;Vermicelli:45,45,2,1,5@0.8/2/smoother;' +
+    'Burlap:5,5,4,0.6,1@1.2/1.6/smoother'));
+  const p = new URLSearchParams();
+  p.set('packs', spec);
+  const before = p.toString().length;
+  const after = compactQuery(p).length;
+  assert.equal(after, 'packs='.length + spec.length, 'nothing left escaped');
+  assert.ok(after <= before * 0.7, `expected <=70% of ${before}, got ${after}`);
 });

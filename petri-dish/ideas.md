@@ -82,7 +82,8 @@ rotation. This is the capture affordance that replaces the rejected "record live
 play" idea: **play → tune → store into a slot → repeat → arrange slots later.**
 It makes the pack a sampler pad bank.
 
-- ✅ **Store** the live config (the five params) into slot 0-9 — `⇧0`-`⇧9`
+- ✅ **Store** the live config (the five params) into slot 0-9 — `S`, then the
+  slot (`⇧0`-`⇧9` was built and then pulled; see below)
 - ✅ **Clear** a slot, leaving a hole
 - ✅ **Fork on write** — see the forced constraint below
 - ✅ Pills grow an empty state; `pickPreset` no-ops on an empty slot; the lerp
@@ -132,17 +133,31 @@ palette you liked becomes impossible.
 #### Settled while building
 
 - **Clear gesture: arm, then pick** — the lean, as designed. `X` (button or key)
-  arms and the next slot pick consumes it; `S` arms store the same way, which is
-  the touch path for storing. Identical under a finger and a mouse, no long-press
-  plumbing, and the armed state is visible (the bank tints, the mode row appends
-  `clear?`). Cancels on `Esc`, on the same key again, or after 6s — an armed
-  destructive mode shouldn't outlive your attention.
+  arms and the next slot pick consumes it; `S` arms store the same way. Identical
+  under a finger and a mouse, no long-press plumbing, and the armed state is
+  visible (the bank tints, the mode row appends `clear?`). Cancels on `Esc`, on
+  the same key again, or after 6s — an armed destructive mode shouldn't outlive
+  your attention.
+- **Arming is the *only* way to store.** `⇧0`-`⇧9` as a one-press direct store
+  was built, used, and pulled the same day (2026-09-13): with no undo behind it,
+  a single keystroke that silently overwrites a slot is one slip from losing
+  something you wanted, and the slip is cheap — `⇧` is already held for `⇧B`, and
+  the digits are right there. Two presses is the right friction for a
+  destructive, unrecoverable action.
 
 #### Still open
 
-- **Undo on store** — one level is cheap, a history isn't. Fork-on-write already
-  covers the catastrophic case (built-ins are safe) but not "I just overwrote my
-  good slot 4." Not built; revisit once something actually gets lost.
+- **Undo on store, and `⇧N` behind it.** One level of undo is cheap, a history
+  isn't. Fork-on-write already covers the catastrophic case (built-ins are safe)
+  but not "I just overwrote my good slot 4." These two are one item, in this
+  order: **undo first, then `⇧0`-`⇧9` can come back**, because the sampler
+  convention is genuinely the faster gesture once a slip is recoverable — it just
+  can't lead.
+
+  The plumbing is still in place and the hard part is already solved. `slotFromKey`
+  reads `e.code`, so `⇧1` is identifiable (`e.key` for it is `!`, with no digit in
+  it to test) and layout-robust; the keydown handler returns early on `e.shiftKey`
+  and `storeIntoSlot` is unchanged. Putting it back is deleting that guard.
 - **Rename a slot.** Auto-names shipped as designed (`33x66x7`, or a base
   preset's name when all five params match it exactly). A rename would have to be
   a separate later gesture — prompting at store time interrupts the play→capture
@@ -225,11 +240,20 @@ run headless for screensaver use.
   shift+1 is `!`. The handler at `sketch.js:749` tests `e.key >= '0' && e.key <= '9'`,
   so the store path needs `e.code` (`Digit1`…`Digit0`), which is also more
   layout-robust.
-- **`URLSearchParams` triples every delimiter.** The 4-preset `?packs=` URL we
-  ship runs ~330 chars, of which roughly two thirds is `%3A` / `%2C` / `%2F`
-  inflation — about 120 chars of actual information. Those characters are legal
-  in a query per RFC 3986; building that one param by hand keeps `:;,@` raw and
-  roughly thirds the length. Worth doing before script URLs make it hurt.
+- **`URLSearchParams` inflates every delimiter.** ~~Roughly two thirds of the
+  `?packs=` URL.~~ **Fixed 2026-09-13** (`compactQuery` in `timeline.js`), and
+  the estimate was high. Measured on the shipped Weave pack: the `?packs=` value
+  is 178 characters of information that `URLSearchParams` expands to 266, in a
+  365-character share URL. Raw, that's 178 and 277 — **a third off the param,
+  24% off the whole URL**, not two thirds.
+
+  The shape of the fix is worth keeping in mind for script URLs: let
+  `URLSearchParams` do the encoding, since that's the part that has to be right,
+  then un-escape only `:` `,` `;` `@` `/` — all legal raw in a query per RFC 3986,
+  all passed through untouched by the `URL.search` setter, all read back
+  unchanged by `URLSearchParams`. `&`, `=`, `+` and space stay encoded, since
+  those hold the query's own structure together. A value that literally contains
+  the text `%3A` was already encoded to `%253A` and doesn't match.
 - **`node --test <dir>` with an absolute path fails** ("Cannot find module") —
   it tries to load the directory as an entry point. `node --test <file>`, and a
   bare `node --test` that discovers from the cwd, both work.

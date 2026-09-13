@@ -158,6 +158,24 @@ function encodePack(pk) {
   }).join(';');
 }
 
+// --- query building -------------------------------------------------------
+// URLSearchParams percent-encodes every delimiter a pack spec is made of. Measured
+// on the shipped Weave pack: the ?packs= value is 178 characters of information
+// that URLSearchParams blows up to 266 with %3A / %2C / %3B / %2F, and the whole
+// share URL runs 365. Raw, those are 178 and 277 — a third off the param, 24% off
+// the URL. (The design note in ideas.md guessed two thirds; it's a third.)
+// All five delimiters are legal raw in a query per RFC 3986 (`:` and `@` are
+// pchar, `,` and `;` are sub-delims, `/` is explicitly allowed), the URL.search
+// setter passes them through, and URLSearchParams reads them back unchanged.
+//
+// So: let URLSearchParams do the encoding — it's the part that has to be right —
+// then un-escape only these five. `&`, `=`, `+` and space stay encoded, because
+// those are what hold the query's own structure together. A value that literally
+// contains the characters "%3A" was encoded to "%253A" and doesn't match.
+const RAW_IN_QUERY = { '%3A': ':', '%2C': ',', '%3B': ';', '%40': '@', '%2F': '/' };
+const compactQuery = (params) =>
+  params.toString().replace(/%3A|%2C|%3B|%40|%2F/g, (m) => RAW_IN_QUERY[m]);
+
 // --- leg timing -----------------------------------------------------------
 // hold/dur are multiples of the panel's lerpDuration rather than absolute
 // seconds, so the lerpDuration knob scales a whole pack up or down while the
@@ -172,7 +190,7 @@ if (typeof module !== 'undefined' && module.exports) {
     SLOT_COUNT, EASINGS, DEFAULT_EASE, PARAMS, TIMING,
     filledCount, firstFilled, nextFilled, trimHoles,
     storeSlot, clearSlot, autoName, forkPack,
-    parsePack, parseSlot, encodePack,
+    parsePack, parseSlot, encodePack, compactQuery,
     legDurFrames, legHoldFrames, legEase,
   };
 }

@@ -20,8 +20,7 @@ on the left edge to open the drawer.
 | `- / =`   | moldSpeed ∓0.5                      |
 | `, / .`   | bgFade ∓1                           |
 | `0`–`9`   | jump to slot 0–9 in the active pack |
-| `⇧0`–`⇧9` | **store** the live config into slot 0–9 |
-| `S` / `X` | arm store / clear, then pick a slot (the touch path) |
+| `S` / `X` | arm store / clear, then press `0`–`9` (or tap a pill) |
 | `B` / `⇧B`| next / previous preset pack         |
 | `D`       | toggle drift mode (perlin auto-morph) |
 | `L`       | toggle lerp mode (cycle through presets) |
@@ -44,11 +43,19 @@ A pack is a bank of **ten slots**, `0`–`9`, and the panel always shows all ten
 an empty slot is an outlined pad rather than a missing one, which is what makes
 storing into it discoverable.
 
-**Play → tune → `⇧N` → repeat.** `⇧0`–`⇧9` stores whatever is on screen right now
-into that slot; storing mid-lerp captures the transient, which is usually the
-point. `S` then a slot does the same without a keyboard, and `X` then a slot
-clears one. An armed action cancels on `Esc`, on pressing the same key again, or
-after six seconds.
+**Play → tune → `S` → pick a slot → repeat.** Storing takes two presses: `S`
+arms it (the pill row tints, the mode row shows `store?`), then `0`–`9` or a tap
+on a pill says where. `X` arms a clear the same way. An armed action cancels on
+`Esc`, on pressing the same key again, or after six seconds.
+
+Storing mid-lerp captures the transient, which is usually the point — the
+interesting configurations are often a few seconds after a change, not where it
+settles.
+
+Two presses rather than one is deliberate: there is no undo, so a single
+keystroke that overwrites a slot is one slip away from losing something you
+wanted. A one-press `⇧N` store is [parked in `ideas.md`](ideas.md) for when
+there's an undo to catch it.
 
 Two rules the rest follows from:
 

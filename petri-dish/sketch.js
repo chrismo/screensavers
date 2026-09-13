@@ -14,8 +14,8 @@ Evolution in Approximations of Physarum Transport Networks"
 
 Adds: keyboard + tap controls, named presets grouped into swappable packs
 (each with its own per-leg lerp timing), perlin auto-drift mode, preset-cycle
-lerp, mold reset, "commit"-based brightness shading, and a 10-slot sampler bank
-you can store the live config into.
+lerp, mold reset, "commit"-based brightness shading, and a 10-slot bank you can
+store the live config into.
 
 Pure pack/slot logic lives in timeline.js (loaded first); this file is the p5
 sketch, the panel, and the input handling.
@@ -164,9 +164,10 @@ const legHold = (p) => legHoldFrames(p, lerpDuration);
 
 // --- slot editing ---------------------------------------------------------
 // A pack is a bank of SLOT_COUNT slots and the panel always shows all ten, so
-// storing is play → tune → ⇧N. `armed` is the touch path: the S / X buttons arm
-// an action and the next slot pick consumes it, which behaves identically under
-// a finger and a mouse and needs no long-press.
+// storing is play → tune → S → pick a pad. Arming is the only way in: the S / X
+// buttons (or keys) arm an action and the next slot pick consumes it, which
+// behaves identically under a finger and a mouse and needs no long-press. A
+// one-press store was tried and pulled — too easy to wipe a slot, no undo.
 let armed = null; // null | 'store' | 'clear'
 let armedTimer;
 const ARM_TIMEOUT = 6000;
@@ -326,7 +327,7 @@ const PANEL_HTML = `
         <button class="kbd kbd-action" data-action="drift">D</button><div class="kbd-desc">drift (perlin)</div>
         <button class="kbd kbd-action" data-action="lerp">L</button><div class="kbd-desc">lerp (preset cycle)</div>
         <span class="kbd-pair"><button class="kbd-btn kbd-action" data-action="store">S</button><button
-          class="kbd-btn kbd-action" data-action="clear">X</button></span><div class="kbd-desc">store / clear slot (⇧0-9 stores)</div>
+          class="kbd-btn kbd-action" data-action="clear">X</button></span><div class="kbd-desc">store / clear slot, then pick</div>
         <button class="kbd kbd-action" data-action="reset">R</button><div class="kbd-desc">reset molds</div>
         <button class="kbd kbd-action" data-action="copy">C</button><div class="kbd-desc" id="copy-desc">copy screensaver URL</div>
         <button class="kbd kbd-action" data-action="fullscreen">F</button><div class="kbd-desc">fullscreen</div>
@@ -685,8 +686,9 @@ function editablePack() {
 const setSlots = (pk, slots) => { pk.presets = slots; presets = slots; };
 
 // Store the live config into a slot. This is the capture affordance: play, tune,
-// ⇧N. Values are read live, so storing mid-lerp captures the transient — which is
-// the point, since the interesting moments are often a few seconds after a change.
+// S, pick. Values are read live, so storing mid-lerp captures the transient —
+// which is the point, since the interesting moments are often a few seconds
+// after a change.
 function storeIntoSlot(i) {
   if (!Number.isInteger(i) || i < 0 || i >= SLOT_COUNT) return;
   const forking = !packs[packIdx].custom;
@@ -774,7 +776,7 @@ function shareUrl() {
   if (num !== 4000)                params.set('num',          String(num));
 
   const url = new URL(location.pathname, location.href);
-  url.search = params.toString();
+  url.search = compactQuery(params); // raw `:;,@/` — see timeline.js
   return url.toString();
 }
 
@@ -790,10 +792,10 @@ function copyShareUrl() {
   }).catch(() => {});
 }
 
-// Which slot a keypress addresses, or -1. Read from e.code, because e.key for
-// shift+1 is '!' — there is no digit to test — and because codes don't move
-// under a non-US layout. Numpad digits count; e.key is the fallback for anything
-// that reports no code.
+// Which slot a keypress addresses, or -1. Read from e.code so the digits don't
+// move under a non-US layout, and so a modified digit is still identifiable —
+// e.key for shift+1 is '!', with no digit in it to test. Numpad digits count;
+// e.key is the fallback for anything that reports no code.
 function slotFromKey(e) {
   const m = /^(?:Digit|Numpad)([0-9])$/.exec(e.code || '');
   const ch = m ? m[1] : (e.key >= '0' && e.key <= '9' ? e.key : null);
@@ -837,9 +839,11 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape' && armed) disarm(); // unarmed Escape stays the browser's
   else {
     const slot = slotFromKey(e);
-    if (slot < 0) return;
-    if (e.shiftKey) storeIntoSlot(slot); // sampler convention: ⇧N stores, N recalls
-    else pickSlot(slot);
+    // Shift+digit is deliberately inert: ⇧N as a direct store is one slip away
+    // from wiping a slot you wanted, with no undo behind it. Arming with S first
+    // is the only way in. See ideas.md — this is held, not abandoned.
+    if (slot < 0 || e.shiftKey) return;
+    pickSlot(slot);
   }
   e.preventDefault();
 });
