@@ -6,9 +6,12 @@ general output-fingerprinting idea) live in the repo-root
 
 ## Scripted playback — slots, steps, scripts
 
-**Status:** designed 2026-09-13, not built. Phase 1 (slots) is the agreed
-starting point. This section is the whole design conversation compressed, so
-picking it up cold doesn't mean re-deriving it.
+**Status:** designed 2026-09-13. **Phase 1 (slots) built 2026-09-13** — see
+[`README.md`](README.md#slots) for what it does and
+[`timeline.js`](timeline.js) / [`timeline.test.mjs`](timeline.test.mjs) for the
+logic. Phases 2 (steps) and 3 (UI) are still open. This section is the whole
+design conversation compressed, so picking it up cold doesn't mean re-deriving
+it.
 
 ### The problem
 
@@ -72,19 +75,35 @@ hold→transition state machine in `draw()`, the pills, the URL codec, and the
 palettes themselves (Weave / Bloom / Pulse / Tide are still good *palettes*).
 Partial rework of an existing feature, not a throwaway.
 
-### Phase 1 — slots (start here)
+### Phase 1 — slots — BUILT 2026-09-13
 
 Self-contained, immediately useful while playing, and independent of the step
 rotation. This is the capture affordance that replaces the rejected "record live
 play" idea: **play → tune → store into a slot → repeat → arrange slots later.**
 It makes the pack a sampler pad bank.
 
-- **Store** the live config (the five params) into slot 0-9
-- **Clear** a slot, leaving a hole
-- **Fork on write** — see the forced constraint below
-- Pills grow an empty state; `pickPreset` no-ops on an empty slot; the lerp
+- ✅ **Store** the live config (the five params) into slot 0-9 — `⇧0`-`⇧9`
+- ✅ **Clear** a slot, leaving a hole
+- ✅ **Fork on write** — see the forced constraint below
+- ✅ Pills grow an empty state; `pickPreset` no-ops on an empty slot; the lerp
   cycle skips empties; `encodePack` encodes gaps
-- Toast + pill flash on store, since overwriting is destructive-ish
+- ✅ Toast + pill flash on store, since overwriting is destructive-ish
+
+Two things fell out of building it that the design hadn't anticipated:
+
+- **The bank shows all ten pads, always.** Packs used to render one pill per
+  preset, which makes an empty slot indistinguishable from a slot that isn't
+  there — and storing into slot 7 of a 5-preset pack undiscoverable. Ten fixed
+  pads is what the sampler metaphor was already implying, and it retires
+  `presets.length` as a load-bearing number.
+- **Empty pads are outlined, not dimmed.** Dimming was tried first and read as
+  "filled but inactive" at a glance; an outline with no fill reads as a
+  different *kind* of thing.
+
+Also decided: **storing over a slot keeps that slot's timing.** `hold`/`dur`/
+`ease` are the pack's rhythm and the slot is a position in it, so swapping what
+sits there shouldn't change how the pack moves. (Phase 2 makes this moot by
+moving timing onto steps.)
 
 #### Forking is forced, not a preference
 
@@ -110,15 +129,24 @@ palette you liked becomes impossible.
   Adding `localStorage` would be the project's first hidden state. Revisit only
   if work actually gets lost.
 
-#### Open
+#### Settled while building
 
-- **Clear gesture.** Leaning arm-a-button-then-click-a-pill (discoverable,
-  identical by touch and mouse). Long-press on a pill is the touch-native
-  alternative and `SS.attachHoldRepeat` already has press-and-hold plumbing to
-  crib from.
+- **Clear gesture: arm, then pick** — the lean, as designed. `X` (button or key)
+  arms and the next slot pick consumes it; `S` arms store the same way, which is
+  the touch path for storing. Identical under a finger and a mouse, no long-press
+  plumbing, and the armed state is visible (the bank tints, the mode row appends
+  `clear?`). Cancels on `Esc`, on the same key again, or after 6s — an armed
+  destructive mode shouldn't outlive your attention.
+
+#### Still open
+
 - **Undo on store** — one level is cheap, a history isn't. Fork-on-write already
   covers the catastrophic case (built-ins are safe) but not "I just overwrote my
-  good slot 4."
+  good slot 4." Not built; revisit once something actually gets lost.
+- **Rename a slot.** Auto-names shipped as designed (`33x66x7`, or a base
+  preset's name when all five params match it exactly). A rename would have to be
+  a separate later gesture — prompting at store time interrupts the play→capture
+  flow and is clunky on iPad.
 
 ### Phase 2 — steps
 
@@ -205,6 +233,17 @@ run headless for screensaver use.
 - **`node --test <dir>` with an absolute path fails** ("Cannot find module") —
   it tries to load the directory as an entry point. `node --test <file>`, and a
   bare `node --test` that discovers from the cwd, both work.
+- **Two classic scripts can't both declare the same top-level `const`** — that's
+  a redeclaration `SyntaxError`, not a shadow. Splitting `timeline.js` out of
+  `sketch.js` therefore means *moving* `EASINGS` / `parsePack` / `encodePack`,
+  never copying them. Related: `legDurFrames` can't see `sketch.js`'s live
+  `lerpDuration` binding from another script, so timeline takes it as an
+  argument and `sketch.js` keeps one-arg `legDur` / `legHold` wrappers.
+- **`chrome.js`'s dev live-reload only polled `sketch.js`**, so edits to a new
+  sibling script reloaded nothing. A fixed union list was tried first and was
+  wrong: every sketch lacking a file on it logged a 404 twice a second, in the
+  same console these sketches are debugged in. It's opt-in now — a sketch sets
+  `window.SS_WATCH = ['timeline.js']` before `chrome.js` loads.
 
 ### Testing
 
@@ -227,6 +266,10 @@ maintenance, and they're explicitly not wanted.
 **Not tested** — anything a person answers by looking: whether a pattern is
 interesting, panel layout, the mold field itself. Those stay visual, via
 [`../tools/shot.mjs`](../tools/shot.mjs) probes when a headless check is useful.
+
+Built 2026-09-13: 36 tests in `timeline.test.mjs`, run with
+`node --test petri-dish/timeline.test.mjs`. Step advancement is the one item not
+covered — there are no steps until phase 2.
 
 **How: follow the `knights/solver.js` precedent**, which already solved this
 exact problem in this repo. That file is pure logic with no DOM and no canvas,

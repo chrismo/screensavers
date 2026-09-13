@@ -14,7 +14,11 @@ Evolution in Approximations of Physarum Transport Networks"
 
 Adds: keyboard + tap controls, named presets grouped into swappable packs
 (each with its own per-leg lerp timing), perlin auto-drift mode, preset-cycle
-lerp, mold reset, "commit"-based brightness shading.
+lerp, mold reset, "commit"-based brightness shading, and a 10-slot sampler bank
+you can store the live config into.
+
+Pure pack/slot logic lives in timeline.js (loaded first); this file is the p5
+sketch, the panel, and the input handling.
 */
 
 let molds = [];
@@ -34,17 +38,10 @@ const fadeStep = 1;
 const lerpDurationStep = 60; // 1s @ 60fps
 const driftSpeedStep = 0.001;
 
-// --- easing ----------------------------------------------------------------
-// Named curves a pack can pick per lerp leg. 'smooth' (smoothstep) is what the
-// cycle always used, so it stays the default.
-const EASINGS = {
-  linear:   (t) => t,
-  smooth:   (t) => t * t * (3 - 2 * t),
-  smoother: (t) => t * t * t * (t * (t * 6 - 15) + 10),
-  in:       (t) => t * t,
-  out:      (t) => t * (2 - t),
-};
-const DEFAULT_EASE = 'smooth';
+// EASINGS / DEFAULT_EASE, the pack spec codec and all the slot logic come from
+// timeline.js, loaded as a classic <script src> ahead of this file. Tell
+// chrome.js's dev live-reload to watch it too — it only knows about sketch.js.
+window.SS_WATCH = ['timeline.js'];
 
 // --- presets ---------------------------------------------------------------
 // Each preset snapshots the full live config. The base ten span the regimes
@@ -160,9 +157,20 @@ let lerpT = 0;     // 0-1 through the transition
 let lerpHoldT = 0; // 0-1 through the hold that precedes it
 let lerpDuration = 480; // frames per unit-duration transition (~8s @ 60fps)
 
-const legDurFrames  = (p) => Math.max(1, Math.round(lerpDuration * (p.dur == null ? 1 : p.dur)));
-const legHoldFrames = (p) => Math.max(0, Math.round(lerpDuration * (p.hold || 0)));
-const legEase = (p) => EASINGS[p.ease] || EASINGS[DEFAULT_EASE];
+// timeline.js takes lerpDuration as an argument (it can't see this module's
+// live binding); these close over it so the call sites stay short.
+const legDur  = (p) => legDurFrames(p, lerpDuration);
+const legHold = (p) => legHoldFrames(p, lerpDuration);
+
+// --- slot editing ---------------------------------------------------------
+// A pack is a bank of SLOT_COUNT slots and the panel always shows all ten, so
+// storing is play → tune → ⇧N. `armed` is the touch path: the S / X buttons arm
+// an action and the next slot pick consumes it, which behaves identically under
+// a finger and a mouse and needs no long-press.
+let armed = null; // null | 'store' | 'clear'
+let armedTimer;
+const ARM_TIMEOUT = 6000;
+const slotLabel = (i) => (i + 1) % 10; // slot 9 is the '0' key, as the pills read
 
 // --- DOM panel handles ----------------------------------------------------
 // The control panel is injected from JS so the same sketch.js works locally
@@ -244,6 +252,21 @@ const PANEL_CSS = `
   }
   .preset-pills .pill.active { background: rgba(156, 204, 255, 0.22); color: #9cf; }
   .preset-pills .pill.target { background: rgba(156, 204, 255, 0.45); color: #fff; }
+  /* An empty slot stays visible and tappable — that's how storing into one is
+     discoverable. An outline instead of a fill so it reads as a different *kind*
+     of thing (a pad with nothing on it) rather than as a dimmer preset; merely
+     darkening it was too close to a filled-but-inactive pill to tell apart.
+     Ordered after .active/.target so a tie goes to empty. */
+  .preset-pills .pill.empty {
+    background: none; color: #3a3a3a;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.085);
+  }
+  /* Armed store / clear tints the whole bank, so it's obvious the next tap is
+     not an ordinary preset jump. Clear only lights the slots it could act on. */
+  .preset-pills.arm-store .pill { background: rgba(130, 240, 180, 0.16); color: #7ad9a4; }
+  .preset-pills.arm-clear .pill:not(.empty) { background: rgba(255, 130, 130, 0.20); color: #f99; }
+  .preset-pills .pill.flash { animation: pill-flash 450ms ease-out; }
+  @keyframes pill-flash { from { background: #9cf; color: #04121f; } }
 
   .kbd {
     font-family: inherit; background: rgba(255, 255, 255, 0.07);
@@ -302,6 +325,8 @@ const PANEL_HTML = `
         <button class="kbd kbd-action" data-action="pack">B</button><div class="kbd-desc">next pack (⇧B back)</div>
         <button class="kbd kbd-action" data-action="drift">D</button><div class="kbd-desc">drift (perlin)</div>
         <button class="kbd kbd-action" data-action="lerp">L</button><div class="kbd-desc">lerp (preset cycle)</div>
+        <span class="kbd-pair"><button class="kbd-btn kbd-action" data-action="store">S</button><button
+          class="kbd-btn kbd-action" data-action="clear">X</button></span><div class="kbd-desc">store / clear slot (⇧0-9 stores)</div>
         <button class="kbd kbd-action" data-action="reset">R</button><div class="kbd-desc">reset molds</div>
         <button class="kbd kbd-action" data-action="copy">C</button><div class="kbd-desc" id="copy-desc">copy screensaver URL</div>
         <button class="kbd kbd-action" data-action="fullscreen">F</button><div class="kbd-desc">fullscreen</div>
@@ -436,20 +461,22 @@ function draw() {
     moldSpeed   = driftValue('moldSpeed')   + driftBias.moldSpeed;
     bgFade      = driftValue('bgFade')      + driftBias.bgFade;
     for (const k in driftBias) driftBias[k] *= driftBiasDecay;
-  } else if (lerpMode) {
+  } else if (lerpMode && presets[lerpFrom] && presets[lerpTo]) {
     // Hold at the from-preset first (if the pack asked for one), then run the
     // eased transition. Both lengths come from the from-preset's own settings.
-    const hold = legHoldFrames(presets[lerpFrom]);
+    // Empty slots are skipped, so the cycle walks the filled ones only.
+    const hold = legHold(presets[lerpFrom]);
     if (lerpHoldT < 1) lerpHoldT = hold > 0 ? Math.min(1, lerpHoldT + 1 / hold) : 1;
     if (lerpHoldT < 1) {
       setValues(presets[lerpFrom]);
     } else {
-      lerpT += 1 / legDurFrames(presets[lerpFrom]);
+      lerpT += 1 / legDur(presets[lerpFrom]);
       if (lerpT >= 1) {
         lerpT = 0;
         lerpHoldT = 0;
         lerpFrom = lerpTo;
-        lerpTo = (lerpTo + 1) % presets.length;
+        const nx = nextFilled(presets, lerpFrom);
+        lerpTo = nx < 0 ? lerpFrom : nx;
         presetIdx = lerpFrom;
       }
       applyLerp(presets[lerpFrom], presets[lerpTo], lerpT);
@@ -486,6 +513,7 @@ function setValues(p) {
 
 function applyPreset(i) {
   const p = presets[i];
+  if (!p) return; // empty slot — nothing to apply
   if (drift) {
     // Snap by setting bias = preset - current drift output. Bias decays
     // each frame in draw(), so values drift back to natural orbit.
@@ -517,8 +545,10 @@ function setPack(i, announce) {
   const n = packs.length;
   packIdx = ((i % n) + n) % n;
   presets = packs[packIdx].presets;
-  applyPreset(0);
-  if (lerpMode) restartLerpAt(0);
+  const start = Math.max(0, firstFilled(presets, 0)); // a pack can lead with holes
+  applyPreset(start);
+  presetIdx = start;
+  if (lerpMode) restartLerpAt(start);
   rebuildPresetPills();
   if (announce) window.flashToast?.(`pack: ${packs[packIdx].name}`);
 }
@@ -528,8 +558,9 @@ function cyclePack(dir) {
 }
 
 function restartLerpAt(i) {
-  lerpFrom = i;
-  lerpTo = (i + 1) % presets.length;
+  lerpFrom = presets[i] ? i : Math.max(0, firstFilled(presets, 0));
+  const nx = nextFilled(presets, lerpFrom);
+  lerpTo = nx < 0 ? lerpFrom : nx; // one filled slot: sit on it rather than cycle
   lerpT = 0;
   lerpHoldT = 0;
 }
@@ -545,56 +576,8 @@ function findPack(v) {
   return Number.isInteger(i) && i >= 0 && i < packs.length ? i : -1;
 }
 
-// ?packs= grammar — a whole bank of presets carried in the URL, so a
-// "collection" is just a bookmark instead of an edit to this file:
-//
-//   spec   := preset (';' preset)*
-//   preset := [name ':'] rot ',' sensA ',' sensD ',' speed ',' fade ['@' timing]
-//   timing := hold '/' dur ['/' ease]
-//
-// e.g. ?packs=Fast:45,45,10,1,5@0/0.4/out;Slow:20,20,20,1,5@1/2/smoother
-// Anything unparseable is skipped rather than failing the whole pack, and only
-// the first 10 presets are kept (the pills / 0-9 keys top out there).
-function parsePack(spec, name) {
-  const out = [];
-  for (const chunk of spec.split(';')) {
-    const s = chunk.trim();
-    if (!s) continue;
-    const at = s.indexOf('@');
-    const head = at < 0 ? s : s.slice(0, at);
-    const colon = head.indexOf(':');
-    const nums = (colon < 0 ? head : head.slice(colon + 1)).split(',').map(Number);
-    if (nums.length < 5 || nums.some((n) => !Number.isFinite(n))) continue;
-    const p = {
-      name: (colon < 0 ? '' : head.slice(0, colon).trim()) || `P${out.length + 1}`,
-      rotAngle: nums[0], sensorAngle: nums[1], sensorDist: nums[2],
-      moldSpeed: nums[3], bgFade: nums[4],
-    };
-    if (at >= 0) {
-      const [h, dur, ease] = s.slice(at + 1).split('/');
-      const hv = parseFloat(h);
-      const dv = parseFloat(dur);
-      if (Number.isFinite(hv) && hv >= 0) p.hold = hv;
-      if (Number.isFinite(dv) && dv > 0) p.dur = dv;
-      if (ease && EASINGS[ease.trim()]) p.ease = ease.trim();
-    }
-    out.push(p);
-    if (out.length === 10) break;
-  }
-  return out.length ? { name: name || 'Custom', presets: out, custom: true } : null;
-}
-
-// Inverse of parsePack, for round-tripping a custom pack through copy-URL.
-function encodePack(pk) {
-  const fmt = (n, d) => Number(n.toFixed(d)).toString();
-  return pk.presets.map((p) => {
-    const nm = String(p.name || '').replace(/[;:@\/,]/g, ' ').trim();
-    const head = `${nm ? nm + ':' : ''}${fmt(p.rotAngle, 2)},${fmt(p.sensorAngle, 2)},` +
-      `${fmt(p.sensorDist, 2)},${fmt(p.moldSpeed, 3)},${fmt(p.bgFade, 1)}`;
-    if (p.hold == null && p.dur == null && !p.ease) return head;
-    return `${head}@${fmt(p.hold || 0, 3)}/${fmt(p.dur == null ? 1 : p.dur, 3)}/${p.ease || DEFAULT_EASE}`;
-  }).join(';');
-}
+// parsePack / encodePack — the ?packs= codec — live in timeline.js, next to the
+// slot logic they have to agree with about holes.
 
 // --- action handlers (shared by keyboard and tap UI) ----------------------
 function adjustParam(name, dir) {
@@ -647,10 +630,102 @@ function resetMolds() {
   window.flashToast?.('reset');
 }
 
+// A slot pick from a pill or a digit key. If an action is armed it consumes the
+// pick; otherwise this is the plain "jump to preset" it always was.
+function pickSlot(i) {
+  if (armed === 'store') { disarm(); storeIntoSlot(i); return; }
+  if (armed === 'clear') { disarm(); clearSlotAt(i); return; }
+  pickPreset(i);
+}
+
 function pickPreset(i) {
+  if (!presets[i]) { window.flashToast?.(`slot ${slotLabel(i)} empty`); return; }
   applyPreset(i);
   if (lerpMode) restartLerpAt(i);
-  window.flashToast?.(`preset ${(i + 1) % 10}: ${presets[i].name}`);
+  window.flashToast?.(`preset ${slotLabel(i)}: ${presets[i].name}`);
+}
+
+// Arm store or clear for the next slot pick. Same key again, Escape, or the
+// timeout cancels — an armed destructive mode shouldn't outlive your attention.
+function arm(mode) {
+  if (armed === mode) { disarm(); return; }
+  armed = mode;
+  syncArmClass();
+  window.flashToast?.(mode === 'store' ? 'store → pick a slot' : 'clear → pick a slot');
+  clearTimeout(armedTimer);
+  armedTimer = setTimeout(disarm, ARM_TIMEOUT);
+}
+
+function disarm() {
+  clearTimeout(armedTimer);
+  armed = null;
+  syncArmClass();
+}
+
+function syncArmClass() {
+  if (!dom.presetPills) return;
+  dom.presetPills.classList.toggle('arm-store', armed === 'store');
+  dom.presetPills.classList.toggle('arm-clear', armed === 'clear');
+}
+
+// The first edit to a built-in pack forks it. shareUrl() emits `?pack=weave` for
+// a built-in and the full spec only for a custom pack, so editing in place would
+// make copy-URL hand back pristine Weave — the edit gone from the very URL meant
+// to reproduce it. Forking also means a palette you liked can't be clobbered.
+function editablePack() {
+  const pk = packs[packIdx];
+  if (pk.custom) return pk;
+  const fork = forkPack(pk, packs.map((x) => x.name));
+  packs.push(fork);
+  packIdx = packs.length - 1;
+  presets = fork.presets;
+  return fork;
+}
+
+const setSlots = (pk, slots) => { pk.presets = slots; presets = slots; };
+
+// Store the live config into a slot. This is the capture affordance: play, tune,
+// ⇧N. Values are read live, so storing mid-lerp captures the transient — which is
+// the point, since the interesting moments are often a few seconds after a change.
+function storeIntoSlot(i) {
+  if (!Number.isInteger(i) || i < 0 || i >= SLOT_COUNT) return;
+  const forking = !packs[packIdx].custom;
+  const pk = editablePack();
+  setSlots(pk, storeSlot(pk.presets, i, { rotAngle, sensorAngle, sensorDist, moldSpeed, bgFade }, CLASSIC));
+  if (!lerpMode && !drift) presetIdx = i; // so copy-URL diffs against what we just stored
+  rebuildPresetPills();
+  flashPill(i);
+  window.flashToast?.(`slot ${slotLabel(i)} = ${presets[i].name}` + (forking ? ` · forked to ${pk.name}` : ''));
+}
+
+// Clear a slot, leaving a hole. 5-9 must NOT slide down into a cleared 4: the
+// indexes are the addresses, for muscle memory now and for scripts later.
+function clearSlotAt(i) {
+  if (!presets[i]) { window.flashToast?.(`slot ${slotLabel(i)} already empty`); return; }
+  const forking = !packs[packIdx].custom;
+  const pk = editablePack();
+  const was = pk.presets[i].name;
+  setSlots(pk, clearSlot(pk.presets, i));
+  reseat();
+  rebuildPresetPills();
+  flashPill(i);
+  window.flashToast?.(`slot ${slotLabel(i)} cleared (${was})` + (forking ? ` · forked to ${pk.name}` : ''));
+}
+
+// After an edit, playback may be pointing at a slot that just went away.
+function reseat() {
+  const f = firstFilled(presets, 0);
+  if (f < 0) return; // bank is empty; draw() and updateDom() both tolerate it
+  if (!presets[presetIdx]) { presetIdx = f; applyPreset(f); }
+  if (lerpMode && (!presets[lerpFrom] || !presets[lerpTo])) restartLerpAt(presetIdx);
+}
+
+function flashPill(i) {
+  const pill = dom.presetPills?.children[i];
+  if (!pill) return;
+  pill.classList.remove('flash');
+  void pill.offsetWidth; // restart the animation rather than ignore a repeat store
+  pill.classList.add('flash');
 }
 
 // Build a screensaver-friendly URL that reproduces the current panel state.
@@ -683,13 +758,14 @@ function shareUrl() {
   } else {
     // Manual mode — emit any of the 5 runtime vars that differ from the
     // preset's value. In drift/lerp those vars get rewritten every frame,
-    // so a snapshot would be misleading.
+    // so a snapshot would be misleading. With presetIdx on an empty slot
+    // there's nothing to diff against, so all five go out absolute.
     const p = presets[presetIdx];
-    if (!close(rotAngle,    p.rotAngle))    params.set('rotAngle',    fmt(rotAngle, 2));
-    if (!close(sensorAngle, p.sensorAngle)) params.set('sensorAngle', fmt(sensorAngle, 2));
-    if (!close(sensorDist,  p.sensorDist))  params.set('sensorDist',  fmt(sensorDist, 2));
-    if (!close(moldSpeed,   p.moldSpeed))   params.set('moldSpeed',   fmt(moldSpeed, 3));
-    if (!close(bgFade,      p.bgFade))      params.set('bgFade',      fmt(bgFade, 1));
+    if (!p || !close(rotAngle,    p.rotAngle))    params.set('rotAngle',    fmt(rotAngle, 2));
+    if (!p || !close(sensorAngle, p.sensorAngle)) params.set('sensorAngle', fmt(sensorAngle, 2));
+    if (!p || !close(sensorDist,  p.sensorDist))  params.set('sensorDist',  fmt(sensorDist, 2));
+    if (!p || !close(moldSpeed,   p.moldSpeed))   params.set('moldSpeed',   fmt(moldSpeed, 3));
+    if (!p || !close(bgFade,      p.bgFade))      params.set('bgFade',      fmt(bgFade, 1));
   }
 
   // Speed knobs / mold count apply regardless of mode.
@@ -712,6 +788,16 @@ function copyShareUrl() {
     desc.style.color = '#9cf';
     setTimeout(() => { desc.textContent = orig; desc.style.color = ''; }, 1200);
   }).catch(() => {});
+}
+
+// Which slot a keypress addresses, or -1. Read from e.code, because e.key for
+// shift+1 is '!' — there is no digit to test — and because codes don't move
+// under a non-US layout. Numpad digits count; e.key is the fallback for anything
+// that reports no code.
+function slotFromKey(e) {
+  const m = /^(?:Digit|Numpad)([0-9])$/.exec(e.code || '');
+  const ch = m ? m[1] : (e.key >= '0' && e.key <= '9' ? e.key : null);
+  return ch == null ? -1 : (Number(ch) + 9) % 10; // '1'→slot 0 … '0'→slot 9
 }
 
 // Native keydown rather than p5's keyPressed so the browser's built-in
@@ -746,8 +832,15 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'r' || e.key === 'R') resetMolds();
   else if (e.key === 'c' || e.key === 'C') copyShareUrl();
   else if (e.key === 'h' || e.key === 'H') toggleDrawer();
-  else if (e.key >= '0' && e.key <= '9') pickPreset((Number(e.key) + 9) % 10);
-  else return;
+  else if (e.key === 's' || e.key === 'S') arm('store');
+  else if (e.key === 'x' || e.key === 'X') arm('clear');
+  else if (e.key === 'Escape' && armed) disarm(); // unarmed Escape stays the browser's
+  else {
+    const slot = slotFromKey(e);
+    if (slot < 0) return;
+    if (e.shiftKey) storeIntoSlot(slot); // sampler convention: ⇧N stores, N recalls
+    else pickSlot(slot);
+  }
   e.preventDefault();
 });
 
@@ -786,6 +879,8 @@ function setupDom() {
     if      (a === 'pack')       cyclePack(+1);
     else if (a === 'drift')      toggleDrift();
     else if (a === 'lerp')       toggleLerp();
+    else if (a === 'store')      arm('store');
+    else if (a === 'clear')      arm('clear');
     else if (a === 'reset')      resetMolds();
     else if (a === 'copy')       copyShareUrl();
     else if (a === 'fullscreen') window.toggleFullscreen?.();
@@ -801,11 +896,16 @@ function setupDom() {
 
 const toggleDrawer = window.SS.toggleDrawer;
 
-// Packs vary in length, so the pills are rebuilt (not just relabeled) whenever
-// the active pack changes. No-op until the panel exists (?nopanel=1).
+// The bank is always SLOT_COUNT pads — empty slots show as empty rather than
+// vanishing, which is what makes storing into one discoverable. So the pills are
+// built once and only restyled after that; rebuilding would kill the store flash
+// mid-animation. No-op until the panel exists (?nopanel=1).
 function rebuildPresetPills() {
   if (!dom.presetPills) return;
-  window.SS.presetPills(dom.presetPills, presets.length, pickPreset);
+  if (dom.presetPills.children.length !== SLOT_COUNT) {
+    window.SS.presetPills(dom.presetPills, SLOT_COUNT, pickSlot);
+  }
+  syncArmClass();
 }
 
 function updateDom() {
@@ -819,28 +919,33 @@ function updateDom() {
   dom.driftSpeed.textContent   = nf(driftSpeed, 1, 4);
 
   // The leg rows describe the transition *out of* the preset we're sitting on.
-  const leg = presets[lerpMode ? lerpFrom : presetIdx] || presets[0];
-  dom.legHold.textContent = `${nf(legHoldFrames(leg) / 60, 1, 1)}s`;
-  dom.legLerp.textContent = `${nf(legDurFrames(leg) / 60, 1, 1)}s ${leg.ease || DEFAULT_EASE}`;
+  // Every slot can be empty, so every read of one is a maybe.
+  const cycling = lerpMode && presets[lerpFrom] && presets[lerpTo];
+  const leg = presets[lerpMode ? lerpFrom : presetIdx];
+  dom.legHold.textContent = leg ? `${nf(legHold(leg) / 60, 1, 1)}s` : '—';
+  dom.legLerp.textContent = leg ? `${nf(legDur(leg) / 60, 1, 1)}s ${leg.ease || DEFAULT_EASE}` : '—';
 
   let modeStr = 'manual';
   if (drift) modeStr = 'drift (perlin)';
-  else if (lerpMode) modeStr = lerpHoldT < 1
-    ? `hold ${nf(lerpHoldT * 100, 1, 0)}%`
+  else if (lerpMode) modeStr = !cycling ? 'lerp (no slots)'
+    : lerpHoldT < 1 ? `hold ${nf(lerpHoldT * 100, 1, 0)}%`
     : `lerp ${nf(lerpT * 100, 1, 0)}%`;
+  if (armed) modeStr += ` · ${armed}?`;
   dom.mode.textContent = modeStr;
 
   dom.pack.textContent = packs[packIdx].name;
-  dom.preset.textContent = lerpMode
+  dom.preset.textContent = cycling
     ? `${presets[lerpFrom].name} → ${presets[lerpTo].name}`
-    : presets[presetIdx].name;
+    : (presets[presetIdx]?.name || '—');
 
   const activeIdx = lerpMode ? lerpFrom : presetIdx;
-  const targetIdx = lerpMode ? lerpTo : -1;
+  const targetIdx = cycling ? lerpTo : -1;
   for (let i = 0; i < dom.presetPills.children.length; i++) {
     const p = dom.presetPills.children[i];
-    p.classList.toggle('active', i === activeIdx);
-    p.classList.toggle('target', i === targetIdx);
+    const filled = !!presets[i];
+    p.classList.toggle('active', filled && i === activeIdx);
+    p.classList.toggle('target', filled && i === targetIdx);
+    p.classList.toggle('empty', !filled);
   }
 }
 

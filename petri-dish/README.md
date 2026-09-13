@@ -19,13 +19,16 @@ on the left edge to open the drawer.
 | `[ / ]`   | sensorDist ∓1px                     |
 | `- / =`   | moldSpeed ∓0.5                      |
 | `, / .`   | bgFade ∓1                           |
-| `0`–`9`   | jump to preset 0–9 in the active pack |
+| `0`–`9`   | jump to slot 0–9 in the active pack |
+| `⇧0`–`⇧9` | **store** the live config into slot 0–9 |
+| `S` / `X` | arm store / clear, then pick a slot (the touch path) |
 | `B` / `⇧B`| next / previous preset pack         |
 | `D`       | toggle drift mode (perlin auto-morph) |
 | `L`       | toggle lerp mode (cycle through presets) |
 | `R`       | reset molds (re-seed at center, clear canvas) |
 | `C`       | copy a screensaver URL that reproduces the current state |
 | `H`       | show/hide control drawer            |
+| `Esc`     | cancel an armed store/clear         |
 
 `lerpDuration` and `driftSpeed` are panel-only (no key binding).
 
@@ -34,6 +37,38 @@ on the left edge to open the drawer.
 A preset is a named snapshot of the full live config. The base ten:
 `0 Slime`, `1 Cobweb`, `2 Honeycomb`, `3 Highways`, `4 Plasma`,
 `5 Dendrite`, `6 Tube`, `7 Ooze`, `8 Vermicelli`, `9 Burlap`.
+
+## Slots
+
+A pack is a bank of **ten slots**, `0`–`9`, and the panel always shows all ten —
+an empty slot is an outlined pad rather than a missing one, which is what makes
+storing into it discoverable.
+
+**Play → tune → `⇧N` → repeat.** `⇧0`–`⇧9` stores whatever is on screen right now
+into that slot; storing mid-lerp captures the transient, which is usually the
+point. `S` then a slot does the same without a keyboard, and `X` then a slot
+clears one. An armed action cancels on `Esc`, on pressing the same key again, or
+after six seconds.
+
+Two rules the rest follows from:
+
+- **The first edit to a built-in pack forks it** into `Weave*`. Copy-URL emits
+  `?pack=weave` for a built-in and the full spec only for a custom pack, so
+  editing a built-in in place would make the copied URL hand back pristine Weave
+  — the edit gone from the very URL meant to reproduce it. Forking also means you
+  can't clobber a palette you liked.
+- **Clearing leaves a hole.** Slots 5–9 do not slide down into a cleared 4: the
+  index *is* the address, both for muscle memory and for the scripts in
+  [`ideas.md`](ideas.md) that will reference slots by number. The lerp cycle
+  skips holes; picking one does nothing. Trailing holes carry no information and
+  are trimmed.
+
+Storing over a slot keeps that slot's **timing** (`hold` / `dur` / `ease`, below).
+Timing is the pack's rhythm and the slot is a position in it — you're replacing
+what sits there, not how the pack moves. Names are derived from the params
+(`33x66x7`), or from a base preset when all five match it exactly.
+
+There is no save button: the URL is the save format. Press `C`.
 
 ## Packs
 
@@ -76,8 +111,8 @@ instead of being dragged straight through it.
 rather than an edit to `sketch.js`:
 
 ```
-spec   := preset (';' preset)*
-preset := [name ':'] rotAngle ',' sensorAngle ',' sensorDist ',' moldSpeed ',' bgFade ['@' timing]
+spec   := slot (';' slot)*
+slot   := '' | [name ':'] rotAngle ',' sensorAngle ',' sensorDist ',' moldSpeed ',' bgFade ['@' timing]
 timing := hold '/' dur ['/' ease]
 ```
 
@@ -86,10 +121,12 @@ timing := hold '/' dur ['/' ease]
   &packs=Fast:45,45,10,1,5@0/0.4/out;Slow:20,20,20,1,5@1/2/smoother;Bare:60,60,8,1,5
 ```
 
-Up to 10 presets (the `0`–`9` slots); unparseable entries are skipped rather
-than failing the whole pack, and omitted timing falls back to the defaults
-above. Pressing `C` while a custom pack is active re-emits the whole spec, so
-custom packs round-trip through copy-URL like everything else.
+Up to 10 slots (the `0`–`9` keys). An **empty chunk is an empty slot**, so
+`A:…;;C:…` puts `C` in slot 2 — and an unparseable chunk becomes a hole for the
+same reason, since skipping it would slide every later slot down one and
+invalidate the indexes. Omitted timing falls back to the defaults above.
+Pressing `C` while a custom pack is active re-emits the whole spec, so custom
+packs round-trip through copy-URL like everything else.
 
 ## URL params
 
@@ -103,7 +140,7 @@ table below is for hand-rolling.
 | `?pack=NAME`     | select a built-in pack by slug (`classic`, `weave`, `bloom`, `pulse`, `tide`) or index |
 | `?packs=SPEC`    | define an ad-hoc pack inline and select it (see Packs) |
 | `?packname=S`    | name for the `?packs=` pack (default `Custom`)      |
-| `?preset=N`      | start on preset N (0–9), within the active pack     |
+| `?preset=N`      | start on slot N (0–9), within the active pack       |
 | `?lerp=1`        | start in lerp mode (smoothly cycles all presets)    |
 | `?drift=1`       | start in drift mode (perlin auto-morph)             |
 | `?nopanel=1`     | hide the control drawer (recommended for screensaver) |
@@ -119,6 +156,21 @@ table below is for hand-rolling.
 `lerp` wins over `drift` if both passed. Runtime overrides
 (`rotAngle`–`bgFade`) only stick in manual mode — drift and lerp
 continuously rewrite the same vars in `draw()`.
+
+## Tests
+
+Pure pack/slot logic — the spec codec, hole semantics, fork-on-write, leg
+timing — lives in [`timeline.js`](timeline.js), which the browser loads as a
+plain `<script src>` (so a `file://` double-click still works) and node imports
+through a CommonJS tail. Same split as `knights/solver.js`.
+
+```
+node --test petri-dish/timeline.test.mjs
+```
+
+No dependencies and no `package.json` — node's built-in runner. Deliberately
+scoped to the logic: whether a pattern is *interesting*, and whether the panel
+looks right, stay look-at-it questions.
 
 ## Ideas / deferred work
 
