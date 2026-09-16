@@ -171,9 +171,14 @@ function encodePack(pk) {
 // derived from (scriptFromPack below), but the script is what actually plays.
 //
 //   script := step (';' step)*
-//   step   := ['*'] ('~' | '=') slot ['@' timing]      '~' lerp into, '=' cut to
-//   timing := dur ['/' dwell ['/' ease]]               after '~'
-//           | dwell                                    after '=' (nothing to time)
+//   step   := ['*'] ('~' | '=') slot ['!'] ['@' timing]  '~' lerp into, '=' cut to
+//   timing := dur ['/' dwell ['/' ease]]                 after '~'
+//           | dwell                                      after '=' (nothing to time)
+//
+// `!` is the reset flag: entering the step re-seeds the molds, the way the R key
+// does. It rides next to the slot rather than in the timing because it describes
+// the arrival, not a duration — and because the timing tail is open-ended, so a
+// trailing flag there would be swallowed by the ease field.
 //
 // e.g. ?script=*~2@8/60;~3@4  — loop between a 60s dwell on slot 2 and a 4s morph
 // to slot 3. Seconds are absolute: choreography is written in the units you think
@@ -185,7 +190,7 @@ function encodePack(pk) {
 // exists to keep flat. `~` and `=` both survive raw. `>` is still accepted on the
 // way in, since it's what a hand-writer reaches for; encodeScript emits `~`.
 const DEFAULT_STEP_DUR = 8; // seconds, matching the pack default of 480 frames
-const STEP_RE = /^(\*)?([~=>])(\d+)(?:@(.*))?$/; // '>' is a legacy-friendly alias for '~'
+const STEP_RE = /^(\*)?([~=>])(\d+)(!)?(?:@(.*))?$/; // '>' is a legacy-friendly alias for '~'
 
 function parseScript(spec) {
   const steps = [];
@@ -198,12 +203,12 @@ function parseScript(spec) {
     const slot = Number(m[3]);
     if (slot >= SLOT_COUNT) continue; // '>10' is out of the bank, not slot 1 plus junk
     const cut = m[2] === '=';
-    const parts = (m[4] || '').split('/');
+    const parts = (m[5] || '').split('/');
     const num = (v, dflt) => {
       const n = parseFloat(v);
       return Number.isFinite(n) && n >= 0 ? n : dflt;
     };
-    const step = { slot, cut, dur: 0, dwell: 0, ease: undefined };
+    const step = { slot, cut, dur: 0, dwell: 0, ease: undefined, reset: !!m[4] };
     if (cut) {
       step.dwell = num(parts[0], 0);
     } else {
@@ -223,7 +228,8 @@ function parseScript(spec) {
 function encodeScript(sc) {
   const n = (v) => Number(v.toFixed(3)).toString();
   return sc.steps.map((st, i) => {
-    const head = (i === sc.loopFrom && sc.loopFrom !== 0 ? '*' : '') + (st.cut ? '=' : '~') + st.slot;
+    const head = (i === sc.loopFrom && sc.loopFrom !== 0 ? '*' : '') +
+      (st.cut ? '=' : '~') + st.slot + (st.reset ? '!' : '');
     if (st.cut) return st.dwell ? `${head}@${n(st.dwell)}` : head;
     let parts = [];
     if (st.ease) parts = [n(st.dur), n(st.dwell), st.ease];
@@ -280,6 +286,122 @@ function stepStart(sc, index) {
 
 const findStepForSlot = (sc, slot) => sc.steps.findIndex((st) => st.slot === slot);
 
+// --- the strip: layout and playhead ---------------------------------------
+// What the timeline strip needs from the model, and nothing more. Both are pure,
+// so the strip, the panel and the tests can't disagree about where the playhead
+// is or how wide a segment should be.
+
+// One entry per step, sized by its share of the script. `moveFrac` is how much of
+// that share is the move rather than the dwell, which is what lets a segment show
+// its own shape — a long dwell with a quick approach reads differently from an
+// even morph. A script of nothing but cuts has no seconds at all, so it divides
+// the strip evenly rather than collapsing to zero width.
+function segments(sc) {
+  const { total } = scriptLength(sc);
+  const n = sc.steps.length;
+  return sc.steps.map((st, i) => {
+    const secs = stepSeconds(st);
+    const move = st.cut ? 0 : st.dur;
+    return {
+      index: i, slot: st.slot, cut: st.cut, reset: !!st.reset, ease: st.ease,
+      dur: st.dur, dwell: st.dwell,
+      seconds: secs,
+      frac: total > 0 ? secs / total : 1 / n,
+      moveFrac: secs > 0 ? move / secs : 0,
+      loop: i === sc.loopFrom,
+    };
+  });
+}
+
+// Where the playhead sits, 0 to 1 across the strip. Derived from stepAt so a seek,
+// a loop wrap and a rate change all land in exactly one place; the strip is a view
+// of the clock, never a second copy of it.
+function playheadFrac(sc, elapsed, rate) {
+  const { total } = scriptLength(sc);
+  if (!(total > 0)) return 0;
+  const at = stepAt(sc, elapsed, rate);
+  const st = at.step;
+  const within = at.phase === 'move'
+    ? at.progress * st.dur
+    : (st.cut ? 0 : st.dur) + at.progress * st.dwell;
+  return Math.min(1, (stepStart(sc, at.index) + within) / total);
+}
+
+// --- editing a script -----------------------------------------------------
+// Every edit returns a new script instead of mutating one, the same way a slot
+// edit returns a new bank: the sketch swaps the whole thing in, so there is no
+// half-applied state for draw() to catch mid-frame.
+//
+// The loop marker is an index, so every insert and delete has to carry it — it
+// points at a *step*, and it should keep pointing at that same step afterwards.
+
+const EASE_NAMES = Object.keys(EASINGS);
+
+const clampSlot = (n) => Math.max(0, Math.min(SLOT_COUNT - 1, Math.round(Number(n) || 0)));
+const clampSecs = (n) => { const v = Number(n); return Number.isFinite(v) && v > 0 ? v : 0; };
+
+function withStep(sc, i, patch) {
+  if (!sc || !Number.isInteger(i) || i < 0 || i >= sc.steps.length) return sc;
+  const steps = sc.steps.slice();
+  const st = Object.assign({}, steps[i], patch);
+  st.slot = clampSlot(st.slot);
+  st.dur = clampSecs(st.dur);
+  st.dwell = clampSecs(st.dwell);
+  st.cut = !!st.cut;
+  st.reset = !!st.reset;
+  if (st.ease && !EASINGS[st.ease]) st.ease = undefined;
+  // A 0s lerp *is* a cut, so a step that claims to morph needs a leg to morph
+  // over. Going the other way leaves `dur` parked, so toggling cut is lossless.
+  if (!st.cut && st.dur === 0) st.dur = DEFAULT_STEP_DUR;
+  steps[i] = st;
+  return { steps, loopFrom: sc.loopFrom };
+}
+
+// Insert at `i`, pushing what was there down. The marker rides along if it was at
+// or after the insertion point, so it keeps pointing at the same step.
+function insertStep(sc, i, step) {
+  const steps = sc ? sc.steps.slice() : [];
+  const at = Math.max(0, Math.min(steps.length, i));
+  const base = { slot: 0, cut: false, dur: DEFAULT_STEP_DUR, dwell: 0, ease: undefined, reset: false };
+  const st = Object.assign(base, step);
+  st.slot = clampSlot(st.slot);
+  st.dur = clampSecs(st.dur);
+  st.dwell = clampSecs(st.dwell);
+  st.cut = !!st.cut;
+  st.reset = !!st.reset;
+  if (!st.cut && st.dur === 0) st.dur = DEFAULT_STEP_DUR;
+  steps.splice(at, 0, st);
+  const loopFrom = sc && sc.loopFrom >= at ? sc.loopFrom + 1 : (sc ? sc.loopFrom : 0);
+  return { steps, loopFrom: Math.min(loopFrom, steps.length - 1) };
+}
+
+// Delete step `i`. A script with no steps isn't a script — parseScript returns
+// null for one — so the last step can't be deleted.
+function deleteStep(sc, i) {
+  if (!sc || sc.steps.length <= 1) return sc;
+  if (!Number.isInteger(i) || i < 0 || i >= sc.steps.length) return sc;
+  const steps = sc.steps.slice();
+  steps.splice(i, 1);
+  const loopFrom = sc.loopFrom > i ? sc.loopFrom - 1 : sc.loopFrom;
+  return { steps, loopFrom: Math.min(loopFrom, steps.length - 1) };
+}
+
+// Move the loop marker. Setting it where it already is clears it back to 0 — the
+// whole script loops — so the same gesture turns an intro on and off.
+function setLoopFrom(sc, i) {
+  if (!sc) return sc;
+  const at = Math.max(0, Math.min(sc.steps.length - 1, i));
+  return { steps: sc.steps.slice(), loopFrom: at === sc.loopFrom ? 0 : at };
+}
+
+// Next/previous named curve, wrapping. No ease means the default, so a first
+// press moves off `smooth` rather than onto it.
+function cycleEase(name, dir) {
+  const i = EASE_NAMES.indexOf(EASINGS[name] ? name : DEFAULT_EASE);
+  const n = EASE_NAMES.length;
+  return EASE_NAMES[(((i + (dir < 0 ? -1 : 1)) % n) + n) % n];
+}
+
 // The default script for a pack: its own per-leg timing, rotated. `dur` on the
 // PREVIOUS filled slot timed the leg out of it, which is the leg into this one;
 // `hold` was always the dwell here and stays put. The first slot takes its
@@ -297,6 +419,8 @@ function scriptFromPack(slots, legSeconds) {
       dur: legSeconds * (prev.dur == null ? 1 : prev.dur),
       dwell: legSeconds * (slots[slot].hold || 0),
       ease: prev.ease,
+      reset: false, // only a hand-written script can ask for a re-seed
+
     };
   });
   return { steps, loopFrom: 0 };
@@ -320,9 +444,10 @@ function scriptFromPack(slots, legSeconds) {
 // URLSearchParams reads `script=~2@8/60` and `a=b=c` the same correct way.
 const RAW_IN_QUERY = {
   '%3A': ':', '%2C': ',', '%3B': ';', '%40': '@', '%2F': '/', '%3D': '=', '%7E': '~',
+  '%21': '!',
 };
 const compactQuery = (params) =>
-  params.toString().replace(/%3A|%2C|%3B|%40|%2F|%3D|%7E/g, (m) => RAW_IN_QUERY[m]);
+  params.toString().replace(/%3A|%2C|%3B|%40|%2F|%3D|%7E|%21/g, (m) => RAW_IN_QUERY[m]);
 
 // --- easing lookup --------------------------------------------------------
 // Takes an object rather than a name, so a step, a preset or a bare { ease } all
@@ -337,6 +462,8 @@ if (typeof module !== 'undefined' && module.exports) {
     storeSlot, clearSlot, autoName, forkPack,
     parsePack, parseSlot, encodePack, compactQuery,
     DEFAULT_STEP_DUR, parseScript, encodeScript, stepSeconds, scriptLength, stepAt, stepStart, findStepForSlot, scriptFromPack,
+    segments, playheadFrac,
+    EASE_NAMES, withStep, insertStep, deleteStep, setLoopFrom, cycleEase,
     legEase,
   };
 }

@@ -6,13 +6,13 @@ general output-fingerprinting idea) live in the repo-root
 
 ## Scripted playback — slots, steps, scripts
 
-**Status:** designed 2026-09-13. **Phases 1 (slots) and 2 (steps) built
-2026-09-13** — see [`README.md`](README.md#slots) and
-[`README.md#scripts`](README.md#scripts) for what they do, and
-[`timeline.js`](timeline.js) / [`timeline.test.mjs`](timeline.test.mjs) for the
-logic. **Phase 3 (the editing UI) is the open one**, and until it lands a script
-can only be written by hand in the URL. This section is the whole design
-conversation compressed, so picking it up cold doesn't mean re-deriving it.
+**Status:** designed 2026-09-13. **All three phases built** — slots and steps
+2026-09-13, the editing UI and the `reset` flag 2026-09-15. See
+[`README.md`](README.md#slots) and [`README.md#scripts`](README.md#scripts) for
+what they do, and [`timeline.js`](timeline.js) /
+[`timeline.test.mjs`](timeline.test.mjs) for the logic. This section is the whole
+design conversation compressed, so picking it up cold doesn't mean re-deriving
+it.
 
 ### The problem
 
@@ -159,12 +159,7 @@ palette you liked becomes impossible.
   reads `e.code`, so `⇧1` is identifiable (`e.key` for it is `!`, with no digit in
   it to test) and layout-robust; the keydown handler returns early on `e.shiftKey`
   and `storeIntoSlot` is unchanged. Putting it back is deleting that guard.
-- **The `reset` flag on a step.** Held since the design and still unbuilt, but
-  the precondition it was waiting on — "a script to try it against" — is now met.
-  The theory: the best issue #1 effects are *from-scratch* transients that a slow
-  lerp can't reproduce, because the field adapts continuously instead of starting
-  over. A `!` suffix on a step, calling what `R` does on entry, would settle it in
-  one viewing. This is the cheapest high-information thing left.
+- ~~**The `reset` flag on a step.**~~ **Built 2026-09-15** — see Phase 3.
 - **Rename a slot.** Auto-names shipped as designed (`33x66x7`, or a base
   preset's name when all five params match it exactly). A rename would have to be
   a separate later gesture — prompting at store time interrupts the play→capture
@@ -186,11 +181,7 @@ The rotation described above, plus:
   (glide) and `=` (snap) both survive raw; `>` is still read, never written. The
   raw set also gained `=`, which is safe because only the *first* `=` of a pair
   separates key from value.
-- ⛔ The **`reset` flag** is still **held**. It was the one bullet left out on
-  purpose: it was parked pending "a script to try it against", and there is now
-  one, but building it unasked is scope nobody chose. It is ~5 lines (a `!`
-  suffix on a step, calling what `R` does on step entry) and it is the obvious
-  next experiment — see Still open below.
+- ✅ The **`reset` flag**, built 2026-09-15 — see Phase 3 below.
 
 #### The doc contradicted itself about what a step is
 
@@ -229,30 +220,76 @@ makes a cleared slot harmless. `stepAt()` deliberately does not report a `from`.
 The cost: playback is not a pure function of `t`, so a Phase 3 scrub will be
 approximate across a seek. Revisit if the timeline strip needs exactness.
 
-### Phase 3 — UI surface — NEXT
+### Phase 3 — UI surface — BUILT 2026-09-15
 
-Nothing here is built. Playback runs and is fully described by the panel's
-`step` / `step timing` / `mode` rows, but a script can only be *written* by hand
-in the URL — which makes the strip-vs-list decision below the thing standing
-between scripts and actually using them.
+**B and A both, which is what the design already implied.** The fork was posed as
+strip-vs-list, but the "if B" note underneath it — *strip selects, drawer edits*
+— is a both-answer wearing a one-answer's clothes: B needs somewhere to put the
+numbers, and A is that somewhere. C (radial) stays rejected for editing and stays
+interesting as a display.
 
-Two candidates. **A** is the conventional shape for a sequencer and the cheaper
-build; **B** needs to be seen before judging, and a static mock (real segment
-widths, real playhead, no editing) is under an hour purely to look at.
-
-| | shape | read |
+| | shape | verdict |
 | --- | ----- | ---- |
-| **A** | Vertical step list in the drawer, collapsible sections | Step lists are vertical in every sequencer ever made. Reuses `SS.paramRow` and the drawer grammar wholesale |
-| **B** | Horizontal strip along the bottom — segments sized by duration, playhead sweeps, click to scrub | The natural axis for time; doesn't fight the left drawer; doubles as a playback HUD. More build |
-| C | Radial/ring, playhead sweeping a circle | Makes the loop structure self-evident and suits the screensaver aesthetic. Poor for precise editing — possibly a lovely *display* later |
+| **A** | Vertical step list in the drawer | **Built**, as the `script` section: `slot` / `move` / `dwell` / `ease` on ordinary −/+ rows, plus morph↔cut, `!`, duplicate, drop, loop-from-here |
+| **B** | Horizontal strip along the bottom | **Built.** One segment per step, width = its share of the script's seconds, approach as gradient and dwell as flat, `↻` on the loop step, playhead sweeping |
+| C | Radial/ring | Not built. Still a poor editor and still possibly a lovely display |
 
-If **B**: **strip selects, drawer edits.** Drag-to-resize is the expensive,
-fiddly part (hit targets, snapping, touch); clicking a segment to select it and
-then editing via ordinary `−/+` rows gets the same result with no new
-interaction code and hold-to-repeat already working.
+- ✅ The **`reset` flag**, the item held since the design. `!` rides next to the
+  slot (`=4!@30`), not in the timing tail — the tail is open-ended, so a trailing
+  flag there gets swallowed by the ease field. It fires on step **entry**, which
+  for a cut is the same instant as arrival. Measured on a 2s loop: exactly two
+  re-seeds over 4s, molds 21px from center right after one and 79px 60 frames
+  later. The hypothesis it was parked to test is now a thing you can actually
+  watch.
+- ✅ Suppressed completely under `?nopanel=1` — verified, the strip element is
+  never built.
 
-Whichever wins, it must suppress completely under `?nopanel=1` — playback has to
-run headless for screensaver use.
+#### Decided while building
+
+- **The strip is visible when playing OR when the drawer is open.** Two
+  conditions, each with its own reason: it's a playback HUD, and it's the thing
+  you select from while editing. It slides right by the drawer's 280px when both
+  are up (`#drawer.open ~ #strip`), so a script is never half-hidden behind the
+  drawer.
+- **Nothing in the strip's state changes its layout.** The separator, the cut
+  edge and the selection are inset shadows and an outline, never borders or gaps
+  — so a segment's width stays exactly its fraction of the script and the
+  playhead can't drift out of agreement with the segments. Measured: a 19.2s step
+  in a 106.4s script came out 207px of a 1149px track, which is the fraction to
+  the pixel.
+- **The playhead derives from `stepAt()`**, via a pure `playheadFrac()`, rather
+  than keeping its own clock. The strip is a *view* of playback, so a seek, a loop
+  wrap and a rate change can't put the line and the molds in different places.
+- **The strip rebuilds on script identity.** Every timeline.js edit returns a new
+  script object, so `stripScript !== script` is a complete change signal — no
+  dirty flags to keep in sync, and no teardown of the element under the pointer 60
+  times a second.
+- **The first script edit forks the script**, exactly parallel to slots forking a
+  built-in pack, and forced the same way: `rebuildScript()` regenerates a derived
+  script from pack timing, and `shareUrl()` emits only `?lerp=1` for one. An edit
+  that didn't set `scriptCustom` would be wiped by the next slot store *and* be
+  missing from the URL meant to reproduce it.
+- **Clicking a segment seeks to the step's start, not its arrival** — the
+  opposite of `0`-`9`. Pressing `3` means "show me slot 3 now"; clicking a segment
+  means "play me this bit", and the approach is part of the bit.
+- **`+` duplicates the selected step** rather than inserting a blank. A new step
+  is nearly always a variation on the one you were just looking at.
+- **A cut keeps its `move` duration parked**, so morph→cut→morph is lossless in
+  the session. It can't survive the URL — a cut has nowhere to write the number —
+  which the round-trip test asserts explicitly rather than leaving to be
+  discovered.
+
+#### Still open after Phase 3
+
+- **No keyboard path to the editor.** Selecting a step is pointer-only. Stepping
+  the selection with `⇧←/→` would be a few lines, but every free key is a key that
+  can be hit by accident, so it waits for the want to be real.
+- **Drag-to-retime a segment.** Deliberately not built (see above). The −/+ rows
+  cover it; revisit only if re-timing by eye against the playhead turns out to be
+  the thing you actually want to do.
+- **The playhead is approximate across a seek**, because playback isn't a pure
+  function of `t` — the lerp origin is snapshotted. Unchanged by Phase 3, and
+  still only worth fixing if exact scrubbing is wanted.
 
 ### Rejected, and why (don't re-litigate)
 
@@ -308,6 +345,11 @@ run headless for screensaver use.
   unchanged by `URLSearchParams`. `&`, `=`, `+` and space stay encoded, since
   those hold the query's own structure together. A value that literally contains
   the text `%3A` was already encoded to `%253A` and doesn't match.
+- **`!` survives a query raw, `>` doesn't** — same family as the `>` lesson, and
+  worth re-checking per character rather than reasoning about it. `URLSearchParams`
+  escapes `!` to `%21`, but it's an RFC 3986 sub-delim and *not* in the URL spec's
+  query percent-encode set, so it joins `compactQuery`'s raw set and a `!` step
+  costs one character instead of three. `*` (the loop marker) was already safe.
 - **`node --test <dir>` with an absolute path fails** ("Cannot find module") —
   it tries to load the directory as an entry point. `node --test <file>`, and a
   bare `node --test` that discovers from the cwd, both work.
@@ -346,8 +388,17 @@ interesting, panel layout, the mold field itself. Those stay visual, via
 [`../tools/shot.mjs`](../tools/shot.mjs) probes when a headless check is useful.
 
 Built 2026-09-13: 36 tests in `timeline.test.mjs`, run with
-`node --test petri-dish/timeline.test.mjs`. Step advancement is the one item not
-covered — there are no steps until phase 2.
+`node --test petri-dish/timeline.test.mjs`. **89 as of 2026-09-15**, covering
+step advancement, the `reset` flag, strip layout (`segments` / `playheadFrac`)
+and every script edit.
+
+The strip pulled more logic into timeline.js than expected, and that was the
+point: segment widths and playhead position are *arithmetic*, so they belong
+where they can be asserted rather than eyeballed. What stayed visual is what
+should be — whether the approach-gradient reads as arriving, and whether the live
+segment looks live. Both needed a real fix that no test would have caught: the
+dwell was rendering darker than the end of its own approach, which reads
+backwards.
 
 **How: follow the `knights/solver.js` precedent**, which already solved this
 exact problem in this repo. That file is pure logic with no DOM and no canvas,

@@ -18,6 +18,7 @@ const {
   parsePack, encodePack, compactQuery,
   legEase,
   DEFAULT_STEP_DUR, parseScript, encodeScript, stepSeconds, scriptLength, stepAt, stepStart, findStepForSlot, scriptFromPack,
+  segments, playheadFrac, withStep, insertStep, deleteStep, setLoopFrom, cycleEase,
 } = T;
 
 // A minimal preset factory: the five params plus a name.
@@ -325,17 +326,17 @@ test('compactQuery takes a third off a real pack spec', () => {
 test('parseScript reads a lerp step: slot, dur, dwell, ease', () => {
   const s = parseScript('~3@6/60/smoother');
   assert.equal(s.steps.length, 1);
-  assert.deepEqual(s.steps[0], { slot: 3, cut: false, dur: 6, dwell: 60, ease: 'smoother' });
+  assert.deepEqual(s.steps[0], { slot: 3, cut: false, dur: 6, dwell: 60, ease: 'smoother', reset: false });
 });
 
 test('parseScript reads a cut step, whose one number is the dwell', () => {
   // a cut has no transition to time, so `@10` is 10s parked — not a 10s move
-  assert.deepEqual(parseScript('=0@10').steps[0], { slot: 0, cut: true, dur: 0, dwell: 10, ease: undefined });
+  assert.deepEqual(parseScript('=0@10').steps[0], { slot: 0, cut: true, dur: 0, dwell: 10, ease: undefined, reset: false });
 });
 
 test('parseScript defaults a bare step to a plain morph, no dwell', () => {
-  assert.deepEqual(parseScript('~1').steps[0], { slot: 1, cut: false, dur: DEFAULT_STEP_DUR, dwell: 0, ease: undefined });
-  assert.deepEqual(parseScript('=1').steps[0], { slot: 1, cut: true, dur: 0, dwell: 0, ease: undefined });
+  assert.deepEqual(parseScript('~1').steps[0], { slot: 1, cut: false, dur: DEFAULT_STEP_DUR, dwell: 0, ease: undefined, reset: false });
+  assert.deepEqual(parseScript('=1').steps[0], { slot: 1, cut: true, dur: 0, dwell: 0, ease: undefined, reset: false });
 });
 
 test('parseScript loops from step 0 unless a * marks another', () => {
@@ -439,8 +440,8 @@ test('scriptFromPack rotates outgoing legs into arriving ones', () => {
   const s = scriptFromPack(slots, 8); // 8s per unit leg
   assert.deepEqual(s.steps, [
     // arriving at A takes B's outgoing leg, because the cycle wraps
-    { slot: 0, cut: false, dur: 16, dwell: 6.4, ease: 'linear' },
-    { slot: 1, cut: false, dur: 14.4, dwell: 4.8, ease: 'smoother' },
+    { slot: 0, cut: false, dur: 16, dwell: 6.4, ease: 'linear', reset: false },
+    { slot: 1, cut: false, dur: 14.4, dwell: 4.8, ease: 'smoother', reset: false },
   ]);
   assert.equal(s.loopFrom, 0);
 });
@@ -482,4 +483,198 @@ test('findStepForSlot finds the first step targeting a slot, or -1', () => {
   assert.equal(findStepForSlot(EXAMPLE, 2), 2);
   assert.equal(findStepForSlot(EXAMPLE, 0), 0);
   assert.equal(findStepForSlot(EXAMPLE, 7), -1);
+});
+
+// --- the reset flag -------------------------------------------------------
+// `!` on a step calls what the R key does when the step is entered. The theory
+// it exists to test (ideas.md): the best transients are *from-scratch* ones a
+// slow lerp can't reproduce, because the field adapts continuously instead of
+// starting over.
+
+test('parseScript reads ! as the reset flag, before the timing', () => {
+  assert.equal(parseScript('=4!@30').steps[0].reset, true);
+  assert.equal(parseScript('~4@30').steps[0].reset, false);
+  assert.deepEqual(parseScript('=4!@30').steps[0],
+    { slot: 4, cut: true, dur: 0, dwell: 30, ease: undefined, reset: true });
+});
+
+test('the reset flag survives a parse/encode round-trip', () => {
+  for (const spec of ['=4!@30', '~1!', '~2!@6/60/smoother', '=0@10;*~3!@4/20']) {
+    assert.equal(encodeScript(parseScript(spec)), spec, spec);
+  }
+});
+
+test('! composes with the loop marker on the same step', () => {
+  const sc = parseScript('~0;*~1!@2');
+  assert.equal(sc.loopFrom, 1);
+  assert.equal(sc.steps[1].reset, true);
+});
+
+test('! survives raw in a query, so it does not re-inflate the URL', () => {
+  // The lesson `>` taught: a sigil that percent-encodes costs 2 characters on
+  // every step it appears on. `!` is a sub-delim, legal raw in a query.
+  const p = new URLSearchParams();
+  p.set('script', '=4!@30');
+  assert.match(compactQuery(p), /script==4!@30/);
+  assert.equal(new URLSearchParams(compactQuery(p)).get('script'), '=4!@30');
+});
+
+test('scriptFromPack derives steps that do not reset', () => {
+  // a pack has no way to say "reset here" — only a hand-written script does
+  assert.equal(scriptFromPack([{ name: 'A' }], 8).steps[0].reset, false);
+});
+
+// --- the strip: layout + playhead -----------------------------------------
+// The timeline strip needs two things from the model, and both are pure: how wide
+// each step's segment is, and where the playhead sits. Keeping them here means
+// the strip, the panel and the tests all read one answer.
+
+test('segments size each step by its share of the whole script', () => {
+  const segs = segments(EXAMPLE); // 10 + 9 + 68 + 4 = 91s
+  assert.deepEqual(segs.map((s) => s.seconds), [10, 9, 68, 4]);
+  assert.equal(segs.reduce((a, s) => a + s.frac, 0).toFixed(6), '1.000000');
+  assert.equal(segs[0].frac.toFixed(4), (10 / 91).toFixed(4));
+});
+
+test('segments split each step into its move and its dwell', () => {
+  const segs = segments(EXAMPLE);
+  assert.equal(segs[0].moveFrac, 0, 'a cut is all dwell');
+  assert.equal(segs[1].moveFrac.toFixed(4), (6 / 9).toFixed(4));
+  assert.equal(segs[2].moveFrac.toFixed(4), (8 / 68).toFixed(4));
+});
+
+test('segments mark where the loop returns to', () => {
+  assert.deepEqual(segments(EXAMPLE).map((s) => s.loop), [false, false, true, false]);
+  assert.deepEqual(segments(parseScript('~0;~1')).map((s) => s.loop), [true, false]);
+});
+
+test('segments of a script with no duration still divide the strip evenly', () => {
+  // '=0;=1' is two cuts and zero seconds — a width of 0/0 would vanish the strip
+  const segs = segments(parseScript('=0;=1'));
+  assert.deepEqual(segs.map((s) => s.frac), [0.5, 0.5]);
+});
+
+test('playheadFrac sweeps 0 to 1 across the whole script', () => {
+  assert.equal(playheadFrac(EXAMPLE, 0, 1), 0);
+  assert.equal(playheadFrac(EXAMPLE, 10, 1).toFixed(4), (10 / 91).toFixed(4));
+  assert.equal(playheadFrac(EXAMPLE, 13, 1).toFixed(4), (13 / 91).toFixed(4));
+  assert.equal(playheadFrac(EXAMPLE, 87, 1).toFixed(4), (87 / 91).toFixed(4));
+});
+
+test('playheadFrac wraps to the loop marker, not to zero', () => {
+  // 91s is intro 19 + loop 72, so it lands back on the * step at 19/91
+  assert.equal(playheadFrac(EXAMPLE, 91, 1).toFixed(4), (19 / 91).toFixed(4));
+  assert.ok(playheadFrac(EXAMPLE, 200, 1) > 0);
+  assert.ok(playheadFrac(EXAMPLE, 200, 1) <= 1);
+});
+
+test('playheadFrac tracks rate, and never leaves the strip', () => {
+  assert.equal(playheadFrac(EXAMPLE, 5, 2), playheadFrac(EXAMPLE, 10, 1));
+  for (const t of [0, 1, 7, 50, 91, 1000]) {
+    for (const r of [0.25, 1, 4]) {
+      const f = playheadFrac(EXAMPLE, t, r);
+      assert.ok(f >= 0 && f <= 1, `t=${t} rate=${r} gave ${f}`);
+    }
+  }
+});
+
+// --- editing a script -----------------------------------------------------
+// Every edit returns a NEW script rather than mutating: the sketch swaps the
+// whole thing in, the same way a slot edit swaps the whole bank in.
+
+test('withStep patches one step and leaves the rest alone', () => {
+  const sc = withStep(EXAMPLE, 1, { dwell: 30 });
+  assert.equal(sc.steps[1].dwell, 30);
+  assert.equal(sc.steps[1].dur, 6, 'untouched fields survive');
+  assert.deepEqual(sc.steps[0], EXAMPLE.steps[0]);
+  assert.equal(EXAMPLE.steps[1].dwell, 3, 'the original is not mutated');
+  assert.equal(sc.loopFrom, EXAMPLE.loopFrom);
+});
+
+test('withStep clamps a slot into the bank and a duration to positive', () => {
+  assert.equal(withStep(EXAMPLE, 0, { slot: 99 }).steps[0].slot, SLOT_COUNT - 1);
+  assert.equal(withStep(EXAMPLE, 0, { slot: -3 }).steps[0].slot, 0);
+  assert.equal(withStep(EXAMPLE, 1, { dwell: -10 }).steps[1].dwell, 0);
+  // a negative dur on a morph can't be 0 — see the cut/lerp test below
+  assert.equal(withStep(EXAMPLE, 1, { dur: -1 }).steps[1].dur, DEFAULT_STEP_DUR);
+  assert.equal(withStep(EXAMPLE, 0, { cut: true, dwell: -1 }).steps[0].dwell, 0);
+});
+
+test('withStep out of range is a no-op', () => {
+  assert.equal(withStep(EXAMPLE, 9, { dwell: 1 }), EXAMPLE);
+  assert.equal(withStep(null, 0, { dwell: 1 }), null);
+});
+
+test('turning a cut back into a lerp gives it a duration to lerp over', () => {
+  // a 0s lerp IS a cut, so a step that says it morphs has to have a leg
+  const sc = withStep(EXAMPLE, 0, { cut: false });
+  assert.equal(sc.steps[0].cut, false);
+  assert.equal(sc.steps[0].dur, DEFAULT_STEP_DUR);
+  // and going the other way keeps the dur parked, so toggling back is lossless
+  assert.equal(withStep(sc, 0, { cut: true }).steps[0].dur, DEFAULT_STEP_DUR);
+  assert.equal(stepSeconds(withStep(sc, 0, { cut: true }).steps[0]), EXAMPLE.steps[0].dwell);
+});
+
+test('insertStep puts a step at an index and carries the loop marker with it', () => {
+  const sc = insertStep(EXAMPLE, 1, { slot: 7 });
+  assert.equal(sc.steps.length, 5);
+  assert.equal(sc.steps[1].slot, 7);
+  assert.equal(sc.loopFrom, 3, 'the * step moved down one');
+  // inserting after the marker leaves it where it is
+  assert.equal(insertStep(EXAMPLE, 3, { slot: 7 }).loopFrom, 2);
+});
+
+test('insertStep fills in a plain morph when given nothing', () => {
+  const st = insertStep(EXAMPLE, 0, {}).steps[0];
+  assert.deepEqual(st, { slot: 0, cut: false, dur: DEFAULT_STEP_DUR, dwell: 0, ease: undefined, reset: false });
+});
+
+test('deleteStep drops a step and keeps the loop marker pointing at the same step', () => {
+  const sc = deleteStep(EXAMPLE, 0);
+  assert.deepEqual(sc.steps.map((s) => s.slot), [1, 2, 3]);
+  assert.equal(sc.loopFrom, 1, 'still the slot-2 step');
+  assert.equal(deleteStep(EXAMPLE, 3).loopFrom, 2, 'deleting after the marker leaves it');
+});
+
+test('deleteStep of the loop marker itself lands the loop on what took its place', () => {
+  const sc = deleteStep(EXAMPLE, 2);
+  assert.deepEqual(sc.steps.map((s) => s.slot), [0, 1, 3]);
+  assert.equal(sc.loopFrom, 2);
+});
+
+test('deleteStep refuses to empty the script', () => {
+  const one = parseScript('~4');
+  assert.equal(deleteStep(one, 0), one, 'a script with no steps is not a script');
+  assert.equal(deleteStep(EXAMPLE, 9), EXAMPLE);
+});
+
+test('setLoopFrom moves the marker, and clicking it again loops the whole script', () => {
+  assert.equal(setLoopFrom(EXAMPLE, 1).loopFrom, 1);
+  assert.equal(setLoopFrom(EXAMPLE, 2).loopFrom, 0, 'the marker toggles off');
+  assert.equal(setLoopFrom(EXAMPLE, 99).loopFrom, EXAMPLE.steps.length - 1);
+  assert.deepEqual(setLoopFrom(EXAMPLE, 1).steps, EXAMPLE.steps);
+});
+
+test('cycleEase walks the named curves and wraps both ways', () => {
+  const names = Object.keys(EASINGS);
+  assert.equal(cycleEase(names[0], +1), names[1]);
+  assert.equal(cycleEase(names[names.length - 1], +1), names[0]);
+  assert.equal(cycleEase(names[0], -1), names[names.length - 1]);
+  assert.equal(cycleEase(undefined, +1), names[names.indexOf(DEFAULT_EASE) + 1], 'no ease means the default');
+  assert.ok(EASINGS[cycleEase('nonsense', +1)], 'an unknown curve still lands somewhere real');
+});
+
+test('an edited script still round-trips through the URL codec', () => {
+  let sc = withStep(EXAMPLE, 3, { reset: true, dwell: 12 });
+  sc = insertStep(sc, 4, { slot: 5, cut: true, dwell: 2 });
+  sc = setLoopFrom(sc, 1);
+  const spec = encodeScript(sc);
+  assert.equal(spec, '=0@10;*~1@6/3;~2@8/60;~3!@4/12;=5@2');
+  assert.equal(encodeScript(parseScript(spec)), spec, 'the spec is a fixed point');
+  // What the URL carries is what plays: same slots, same cut/reset flags, same
+  // seconds, same loop. A cut's `dur` is the one thing it doesn't — that value is
+  // parked so toggling cut off is lossless, and a cut has nowhere to write it.
+  const shape = (x) => x.steps.map((st) => [st.slot, st.cut, st.reset, stepSeconds(st), st.ease]);
+  assert.deepEqual(shape(parseScript(spec)), shape(sc));
+  assert.equal(parseScript(spec).loopFrom, sc.loopFrom);
 });

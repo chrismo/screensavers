@@ -287,6 +287,10 @@ const PANEL_CSS = `
     font-size: 12px; color: #ccc; text-align: center; white-space: nowrap; line-height: 1;
   }
   .kbd-desc { color: #aaa; font-size: 11px; }
+  /* The two script toggles read as state, not just as actions: they show what
+     the SELECTED step currently is, so the pair doubles as a readout. */
+  #btn-stepKind, #btn-stepReset { min-width: 1.4rem; }
+  #btn-stepReset.on { color: #9cf; background: rgba(156, 204, 255, 0.22); }
 
   button.kbd, .kbd-pair .kbd-btn, .preset-pills .pill {
     border: none; cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent;
@@ -296,6 +300,71 @@ const PANEL_CSS = `
   button.kbd:active, .kbd-pair .kbd-btn:active, .preset-pills .pill:active {
     background: rgba(156, 204, 255, 0.32); color: #9cf;
   }
+
+  /* --- the timeline strip -------------------------------------------------
+     The script, laid out along the axis it actually lives on. Each segment is
+     one step, as wide as its share of the script's seconds, split into the
+     approach (a gradient, so it reads as arriving) and the dwell (flat). The
+     playhead sweeps it, which makes it a playback HUD as much as an editor.
+
+     Nothing here changes layout on state change: the separator, the cut edge and
+     the selection are all inset shadows and outlines, so a segment's width stays
+     exactly its fraction and the playhead can't drift out of agreement with it. */
+  #strip {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 34px;
+    box-sizing: border-box; padding: 5px 8px;
+    display: flex; align-items: stretch; gap: 8px;
+    background: rgba(10, 12, 18, 0.55);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    color: #ddd; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    transform: translateY(100%);
+    transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1),
+                left 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+    z-index: 9; /* under the drawer, which owns the left edge */
+  }
+  #strip.show { transform: translateY(0); }
+  /* The drawer is a sibling ahead of the strip in the DOM, so when it's open the
+     strip steps aside rather than hiding half a script behind it. */
+  #drawer.open ~ #strip { left: 280px; }
+
+  #strip-track { position: relative; flex: 1; display: flex; min-width: 0; }
+  #strip-meta { align-self: center; color: #666; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  #strip .seg {
+    position: relative; display: flex; flex-basis: 0; min-width: 3px;
+    border: none; padding: 0; margin: 0; background: none; cursor: pointer;
+    font-family: inherit; -webkit-tap-highlight-color: transparent; overflow: hidden;
+    border-radius: 2px;
+  }
+  #strip .seg:focus { outline: none; }
+  #strip .seg > i { display: block; flex-basis: 0; min-width: 0; }
+  #strip .seg > .move { background: linear-gradient(90deg, rgba(156, 204, 255, 0.05), rgba(156, 204, 255, 0.17)); }
+  #strip .seg > .dwell { background: rgba(156, 204, 255, 0.17); }
+  #strip .seg + .seg { box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.5); }
+  /* A cut has no approach to draw, so it gets a hard bright edge instead. */
+  #strip .seg.cut > .dwell { box-shadow: inset 2px 0 0 rgba(156, 204, 255, 0.7); }
+  #strip .seg.empty > i { background: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.085); }
+  /* The live segment, lit. The move has to LAND on the dwell's value rather than
+     composite over it — an approach brighter than the arrival reads backwards. */
+  #strip .seg.now > .dwell { background: rgba(156, 204, 255, 0.34); }
+  #strip .seg.now > .move { background: linear-gradient(90deg, rgba(156, 204, 255, 0.1), rgba(156, 204, 255, 0.34)); }
+  #strip .seg.sel { outline: 1px solid #9cf; outline-offset: -1px; }
+  #strip .seg .tag {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #cfe6ff; font-weight: 400; font-size: 11px; pointer-events: none;
+  }
+  #strip .seg.empty .tag { color: #4a4a4a; }
+  #strip .seg.loop::before {
+    content: '\\21bb'; position: absolute; left: 2px; top: -1px;
+    font-size: 10px; color: #9cf; pointer-events: none;
+  }
+  #strip-head {
+    position: absolute; top: -3px; bottom: -3px; left: 0; width: 0;
+    border-left: 2px solid #9cf; pointer-events: none;
+    box-shadow: 0 0 6px rgba(156, 204, 255, 0.8);
+  }
+  #strip-head.off { display: none; }
 
   .kbd-pair {
     display: inline-flex; background: rgba(255, 255, 255, 0.07); border-radius: 3px; overflow: hidden;
@@ -333,6 +402,20 @@ const PANEL_HTML = `
       <div class="row wide"><span id="v-step-label" class="label">step</span><span id="v-step" class="val accent"></span></div>
       <div class="row wide"><span class="label">step timing</span><span id="v-stepTiming" class="val"></span></div>
 
+      <h2>script</h2>
+      <div class="row wide"><span class="label">selected</span><span id="v-sel" class="val accent"></span></div>
+      ${paramRow('slot',  'stepSlot',  '')}
+      ${paramRow('move',  'stepDur',   '')}
+      ${paramRow('dwell', 'stepDwell', '')}
+      ${paramRow('ease',  'stepEase',  '')}
+      <div class="legend">
+        <span class="kbd-pair"><button class="kbd-btn kbd-action" id="btn-stepKind" data-action="stepKind">~</button><button
+          class="kbd-btn kbd-action" id="btn-stepReset" data-action="stepReset">!</button></span><div class="kbd-desc">morph / cut · re-seed here</div>
+        <span class="kbd-pair"><button class="kbd-btn kbd-action" data-action="stepAdd">+</button><button
+          class="kbd-btn kbd-action" data-action="stepDel">\u2212</button></span><div class="kbd-desc">duplicate / drop step</div>
+        <button class="kbd kbd-action" data-action="stepLoop">\u21bb</button><div class="kbd-desc">loop from here</div>
+      </div>
+
       <h2>actions</h2>
       <div class="legend">
         <button class="kbd kbd-action" data-action="pack">B</button><div class="kbd-desc">next pack (⇧B back)</div>
@@ -347,6 +430,11 @@ const PANEL_HTML = `
       </div>
     </div>
   </div>
+
+  <div id="strip">
+    <div id="strip-track"><div id="strip-head" class="off"></div></div>
+    <div id="strip-meta"></div>
+  </div>
 `;
 
 const injectCss = window.SS.injectCss;
@@ -356,8 +444,10 @@ function buildPanel() {
   injectCss(PANEL_CSS);
   // PANEL_HTML is a static template literal with no user input — DOMParser
   // is the script-safe path for materializing it into DOM nodes.
+  // Two top-level elements now: the drawer and the strip, in that order — the
+  // `#drawer.open ~ #strip` rule that moves the strip aside depends on it.
   const parsed = new DOMParser().parseFromString(PANEL_HTML, 'text/html');
-  document.body.appendChild(parsed.body.firstElementChild);
+  while (parsed.body.firstElementChild) document.body.appendChild(parsed.body.firstElementChild);
 }
 
 function setup() {
@@ -496,7 +586,14 @@ function draw() {
     scriptT += Math.min(0.1, (deltaTime || 16.7) / 1000);
     const at = stepAt(script, scriptT, rate);
     nowAt = at;
-    if (at.index !== stepIdx) { snapshotInto(moveFrom); stepIdx = at.index; }
+    if (at.index !== stepIdx) {
+      snapshotInto(moveFrom);
+      stepIdx = at.index;
+      // A `!` step re-seeds the field on entry. Quietly: a looping script would
+      // otherwise toast 'reset' forever, and the strip already marks which
+      // segments do this.
+      if (at.step.reset) resetMolds(true);
+    }
     const target = presets[at.step.slot];
     // A step can point at a slot that was cleared after the script was written.
     // It still consumes its time — the choreography keeps its shape — but there
@@ -593,6 +690,7 @@ function cyclePack(dir) {
 function rebuildScript() {
   if (scriptCustom) return;
   script = scriptFromPack(presets, PACK_LEG_SECONDS);
+  selStep = 0; // a fresh script; the old selection indexed a different one
   restartScript();
 }
 
@@ -616,6 +714,100 @@ function seekToSlot(i) {
   return true;
 }
 
+// --- editing the script ---------------------------------------------------
+// The strip selects, the drawer edits — the split ideas.md landed on. Dragging a
+// segment's edge to resize it is the expensive, fiddly part (hit targets,
+// snapping, touch), and clicking to select plus ordinary −/+ rows gets the same
+// result with no new interaction code and hold-to-repeat already working.
+//
+// Every edit swaps in a whole new script (timeline.js returns new objects), so
+// there's no half-applied state for draw() to catch mid-frame.
+let selStep = 0;        // which step the drawer's script rows act on
+let stripScript = null; // the script the strip was last built from
+const stepSecStep = 1;  // seconds per −/+ press; hold-to-repeat ramps it
+
+// The fork-on-write of scripts, forced the same way the pack one is: a derived
+// script is re-created from pack timing on every rebuild and copy-URL emits only
+// `?lerp=1` for it, so an edit that didn't mark the script custom would be
+// overwritten by the next slot store and would vanish from the URL meant to
+// reproduce it.
+function editScript(fn, selectIdx) {
+  if (!script) { window.flashToast?.('no script to edit'); return; }
+  const next = fn(script);
+  if (!next || next === script) return;
+  script = next;
+  scriptCustom = true;
+  selStep = constrain(selectIdx == null ? selStep : selectIdx, 0, script.steps.length - 1);
+  stepIdx = -1; // durations may have moved under the playhead; re-enter the step
+}
+
+const selectedStep = () => (script ? script.steps[constrain(selStep, 0, script.steps.length - 1)] : null);
+
+// Put the playhead at the START of step k — the opposite of seekToSlot, which
+// skips to the arrival. Clicking a segment means "play me this bit", and the
+// approach is part of the bit.
+function seekToStep(k) {
+  if (!script || k < 0 || k >= script.steps.length) return;
+  scriptT = stepStart(script, k) / (rate || 1);
+  stepIdx = -1;
+}
+
+// Clicking a segment. Selecting is the whole job while playing; stopped, it also
+// applies what the step lands on, so the config you're about to edit is on screen.
+function pickStep(k) {
+  if (!script || k < 0 || k >= script.steps.length) return;
+  selStep = k;
+  if (playing) seekToStep(k);
+  else if (presets[script.steps[k].slot]) applyPreset(script.steps[k].slot);
+  syncStrip();
+}
+
+function toggleStepKind() {
+  const st = selectedStep();
+  if (!st) return;
+  editScript((sc) => withStep(sc, selStep, { cut: !st.cut }));
+  window.flashToast?.(`step ${selStep + 1}: ${st.cut ? 'morph' : 'cut'}`);
+}
+
+function toggleStepReset() {
+  const st = selectedStep();
+  if (!st) return;
+  editScript((sc) => withStep(sc, selStep, { reset: !st.reset }));
+  window.flashToast?.(`step ${selStep + 1}: re-seed ${st.reset ? 'off' : 'on'}`);
+}
+
+// Duplicating rather than inserting a blank: a new step is nearly always a
+// variation on the one you were just looking at.
+function addStep() {
+  if (!script) return;
+  const st = selectedStep();
+  editScript((sc) => insertStep(sc, selStep + 1, Object.assign({}, st)), selStep + 1);
+  window.flashToast?.(`step ${selStep + 1} of ${script.steps.length}`);
+}
+
+function dropStep() {
+  if (!script) return;
+  if (script.steps.length <= 1) { window.flashToast?.('a script needs a step'); return; }
+  const was = selStep;
+  editScript((sc) => deleteStep(sc, was), was);
+  window.flashToast?.(`dropped step ${was + 1}`);
+}
+
+function toggleStepLoop() {
+  if (!script) return;
+  editScript((sc) => setLoopFrom(sc, selStep));
+  window.flashToast?.(script.loopFrom ? `loop from step ${script.loopFrom + 1}` : 'loop the whole script');
+}
+
+// The four −/+ script rows. Nudging `move` up on a cut converts it to a morph,
+// since a cut with a duration is a contradiction.
+const STEP_ADJ = {
+  stepSlot:  (st, dir) => ({ slot: st.slot + dir }),
+  stepDur:   (st, dir) => ({ cut: false, dur: max(0, st.dur + dir * stepSecStep) }),
+  stepDwell: (st, dir) => ({ dwell: max(0, st.dwell + dir * stepSecStep) }),
+  stepEase:  (st, dir) => ({ ease: cycleEase(st.ease, dir) }),
+};
+
 const packSlug = (name) => String(name).toLowerCase().replace(/\s+/g, '-');
 
 // Resolve a ?pack= value: a slug/name match first, then a bare index.
@@ -635,6 +827,13 @@ function adjustParam(name, dir) {
   // `pack` isn't a number, but riding the −/+ row keeps the panel uniform and
   // gets hold-to-repeat for free; it toasts its own message.
   if (name === 'pack') { cyclePack(dir); return; }
+  const stepAdj = STEP_ADJ[name];
+  if (stepAdj) {
+    const st = selectedStep();
+    if (st) editScript((sc) => withStep(sc, selStep, stepAdj(st, dir)));
+    toastParam(name);
+    return;
+  }
   if (name === 'rotAngle')         rotAngle    += dir * angleStep;
   else if (name === 'sensorAngle') sensorAngle += dir * angleStep;
   else if (name === 'sensorDist')  sensorDist   = dir < 0 ? max(1, sensorDist - distStep) : sensorDist + distStep;
@@ -656,6 +855,15 @@ function toastParam(name) {
   else if (name === 'bgFade')       msg = `bgFade ${nf(bgFade, 1, 1)}`;
   else if (name === 'rate')         msg = `rate ${nf(rate, 1, 2)}×`;
   else if (name === 'driftSpeed')   msg = `driftSpeed ${nf(driftSpeed, 1, 4)}`;
+  else if (STEP_ADJ[name]) {
+    const st = selectedStep();
+    if (!st) return;
+    msg = `step ${selStep + 1} ` + (
+      name === 'stepSlot'  ? `→ slot ${slotLabel(st.slot)}` :
+      name === 'stepDur'   ? `${st.cut ? 'cut' : `${nf(st.dur, 1, 1)}s move`}` :
+      name === 'stepDwell' ? `${nf(st.dwell, 1, 1)}s dwell` :
+                             `${st.ease || DEFAULT_EASE}`);
+  }
   else return;
   window.flashToast?.(msg);
 }
@@ -678,10 +886,11 @@ function togglePlay() {
   window.flashToast?.(playing ? `play ${n} step${n === 1 ? '' : 's'}` : 'play off');
 }
 
-function resetMolds() {
+// `quiet` is for the `!` step flag, which fires this on every loop.
+function resetMolds(quiet) {
   for (let i = 0; i < num; i++) molds[i] = new Mold();
   background(0);
-  window.flashToast?.('reset');
+  if (!quiet) window.flashToast?.('reset');
 }
 
 // A slot pick from a pill or a digit key. If an action is armed it consumes the
@@ -921,8 +1130,21 @@ function setupDom() {
   dom.pack         = document.getElementById('v-pack');
   dom.preset       = document.getElementById('v-preset');
   dom.presetPills  = document.getElementById('v-preset-pills');
+  dom.sel          = document.getElementById('v-sel');
+  dom.stepSlot     = document.getElementById('v-stepSlot');
+  dom.stepDur      = document.getElementById('v-stepDur');
+  dom.stepDwell    = document.getElementById('v-stepDwell');
+  dom.stepEase     = document.getElementById('v-stepEase');
+  dom.stepKindBtn  = document.getElementById('btn-stepKind');
+  dom.stepResetBtn = document.getElementById('btn-stepReset');
+  dom.drawer       = document.getElementById('drawer');
+  dom.strip        = document.getElementById('strip');
+  dom.stripTrack   = document.getElementById('strip-track');
+  dom.stripHead    = document.getElementById('strip-head');
+  dom.stripMeta    = document.getElementById('strip-meta');
 
   rebuildPresetPills();
+  rebuildStrip();
 
   const toggle = document.getElementById('drawer-toggle');
   toggle.addEventListener('click', () => {
@@ -943,6 +1165,11 @@ function setupDom() {
     else if (a === 'lerp')       togglePlay();
     else if (a === 'store')      arm('store');
     else if (a === 'clear')      arm('clear');
+    else if (a === 'stepKind')   toggleStepKind();
+    else if (a === 'stepReset')  toggleStepReset();
+    else if (a === 'stepAdd')    addStep();
+    else if (a === 'stepDel')    dropStep();
+    else if (a === 'stepLoop')   toggleStepLoop();
     else if (a === 'reset')      resetMolds();
     else if (a === 'copy')       copyShareUrl();
     else if (a === 'fullscreen') window.toggleFullscreen?.();
@@ -968,6 +1195,76 @@ function rebuildPresetPills() {
     window.SS.presetPills(dom.presetPills, SLOT_COUNT, pickSlot);
   }
   syncArmClass();
+}
+
+// --- the timeline strip ---------------------------------------------------
+// Rebuilt only when the script object changes. Every edit in timeline.js returns
+// a NEW script, so identity is a complete change signal — no dirty flags to keep
+// in sync, and no rebuild 60 times a second tearing down the element the pointer
+// is on.
+function syncStrip() {
+  if (!dom.stripTrack) return;
+  if (stripScript !== script) rebuildStrip();
+}
+
+function rebuildStrip() {
+  if (!dom.stripTrack) return;
+  stripScript = script;
+  // Keep the playhead element; it's positioned, not laid out, so it survives.
+  for (const el of Array.from(dom.stripTrack.querySelectorAll('.seg'))) el.remove();
+  if (!script) { dom.stripMeta.textContent = ''; return; }
+
+  for (const seg of segments(script)) {
+    const b = document.createElement('button');
+    b.className = 'seg';
+    b.style.flexGrow = String(seg.frac);
+    const move = document.createElement('i');
+    move.className = 'move';
+    move.style.flexGrow = String(seg.moveFrac);
+    const dwell = document.createElement('i');
+    dwell.className = 'dwell';
+    dwell.style.flexGrow = String(1 - seg.moveFrac);
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = `${slotLabel(seg.slot)}${seg.reset ? '!' : ''}`;
+    b.append(move, dwell, tag);
+    b.title = `step ${seg.index + 1}: ${seg.cut ? 'cut to' : 'morph to'} slot ` +
+      `${slotLabel(seg.slot)}${seg.cut ? '' : ` over ${seg.dur}s`}, dwell ${seg.dwell}s` +
+      `${seg.reset ? ', re-seed' : ''}`;
+    b.addEventListener('click', () => { pickStep(seg.index); b.blur(); });
+    dom.stripTrack.insertBefore(b, dom.stripHead);
+  }
+
+  const { loop, total } = scriptLength(script);
+  dom.stripMeta.textContent = `${nf(total, 1, 0)}s` + (loop !== total ? ` \u21bb${nf(loop, 1, 0)}s` : '');
+}
+
+// Per-frame: the playhead, which segment is live, and which is selected. The
+// strip is a view of the clock — playheadFrac derives from the same stepAt() the
+// mold params do, so the two can't disagree about where playback is.
+function updateStrip() {
+  if (!dom.strip) return;
+  const running = playing && script && nowAt;
+  const drawerOpen = dom.drawer?.classList.contains('open');
+  // Visible when there's something to watch or something to edit. ?nopanel=1
+  // never builds it at all, so a screensaver stays a screensaver.
+  dom.strip.classList.toggle('show', !!script && (playing || !!drawerOpen));
+  if (!script) return;
+
+  dom.stripHead.classList.toggle('off', !running);
+  if (running) dom.stripHead.style.left = `${playheadFrac(script, scriptT, rate) * 100}%`;
+
+  const segs = dom.stripTrack.querySelectorAll('.seg');
+  for (let i = 0; i < segs.length; i++) {
+    const st = script.steps[i];
+    segs[i].classList.toggle('now', running && i === nowAt.index);
+    segs[i].classList.toggle('sel', i === selStep);
+    segs[i].classList.toggle('cut', !!st.cut);
+    segs[i].classList.toggle('loop', i === script.loopFrom);
+    // A step can point at a slot that was cleared out from under it. It keeps its
+    // time — the choreography keeps its shape — but there's nothing to show.
+    segs[i].classList.toggle('empty', !presets[st.slot]);
+  }
 }
 
 function updateDom() {
@@ -1008,6 +1305,22 @@ function updateDom() {
   dom.preset.textContent = running && nowAt.phase === 'move' && presets[st.slot]
     ? `→ ${presets[st.slot].name}`
     : (presets[presetIdx]?.name || '—');
+
+  // The script rows describe the SELECTED step, which is a different question
+  // from where playback is — you edit step 4 while step 2 plays.
+  const sel = selectedStep();
+  dom.sel.textContent = sel
+    ? `${selStep + 1}/${script.steps.length} ${sel.cut ? '=' : '~'}${slotLabel(sel.slot)}${sel.reset ? '!' : ''}`
+    : '—';
+  dom.stepSlot.textContent  = sel ? `${slotLabel(sel.slot)} ${presets[sel.slot]?.name || '(empty)'}` : '—';
+  dom.stepDur.textContent   = sel ? (sel.cut ? 'cut' : `${nf(sel.dur, 1, 1)}s`) : '—';
+  dom.stepDwell.textContent = sel ? `${nf(sel.dwell, 1, 1)}s` : '—';
+  dom.stepEase.textContent  = sel ? (sel.cut ? '—' : (sel.ease || DEFAULT_EASE)) : '—';
+  dom.stepKindBtn.textContent = sel && sel.cut ? '=' : '~';
+  dom.stepResetBtn.classList.toggle('on', !!(sel && sel.reset));
+
+  syncStrip();
+  updateStrip();
 
   // The pill under the playhead is active; the one the next step lands on is the
   // target, which is what makes the bank readable as a score while it runs.
