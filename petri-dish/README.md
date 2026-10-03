@@ -77,7 +77,8 @@ Two rules the rest follows from:
 Storing over a slot keeps that slot's **timing** (`hold` / `dur` / `ease`, below).
 Timing is the pack's rhythm and the slot is a position in it — you're replacing
 what sits there, not how the pack moves. Names are derived from the params
-(`33x66x7`), or from a base preset when all five match it exactly.
+(`33x66x7`), or from a base preset when all five match it exactly — and can be
+changed by clicking them (see Naming, below).
 
 ### Authoring a pack from scratch
 
@@ -101,6 +102,46 @@ empty pack does nothing.
 Forking (the first edit to a built-in) and `N` are the two starting points, and
 they're for different things: forking gives you someone else's palette to vary,
 `N` gives you a blank one.
+
+### Naming
+
+Click the **pack** value or the **preset** value in the drawer to rename it.
+Names show up in the panel and ride in the URL (`?packname=`, and the `Name:`
+prefix on each slot in `?packs=`).
+
+Renaming is a click, not a key and not an `S`-style armed gesture: arming exists
+for destructive actions that need a target, and spending it on a harmless one
+would cost the thing that makes an armed mode read as a warning. It's also why
+there's no prompt at store time — that would interrupt the play→capture flow,
+which the design rejected on purpose. Renaming is always a separate act on
+something that already exists.
+
+`; : @ / ,` can't appear in a name — they're what holds the `?packs=` spec
+together — so the field refuses them as you type rather than letting you discover
+the mangling later in a pasted URL. Renaming a built-in pack **forks** it first,
+for the same reason storing into one does.
+
+Names cost URL length: auto-generated ones already account for roughly a third of
+the `?packs=` value.
+
+### Saving: the address bar *is* the save file
+
+There is no save button, and no hidden storage. The URL is the save format — and
+the address bar is kept in sync with it, so:
+
+- **⌘R is safe.** A reload reproduces what was on screen, pack and script and all.
+- **⌘D bookmarks your pack.** That's what a saved pack is.
+- **`C` still copies a *screensaver* link** — the same URL with `?nopanel=1`, for
+  when you want the thing running without the drawer.
+
+The sync is debounced ~400ms, so holding `+` on a param doesn't churn the bar,
+and it's `replaceState`, so Back isn't flooded with an entry per keystroke (which
+also means Back is not an undo). A fully authored ten-slot pack plus a five-step
+script comes out around 420 characters — an ordinary, pasteable URL.
+
+The one thing that doesn't survive: an *empty* pack. A pack with nothing in it
+encodes to nothing, so the URL says nothing rather than claiming a name it can't
+reproduce. The name comes back with the first stored pad.
 
 ## Packs
 

@@ -175,10 +175,9 @@ palette you liked becomes impossible.
   it to test) and layout-robust; the keydown handler returns early on `e.shiftKey`
   and `storeIntoSlot` is unchanged. Putting it back is deleting that guard.
 - ~~**The `reset` flag on a step.**~~ **Built 2026-09-15** — see Phase 3.
-- **Rename a slot.** Auto-names shipped as designed (`33x66x7`, or a base
-  preset's name when all five params match it exactly). A rename would have to be
-  a separate later gesture — prompting at store time interrupts the play→capture
-  flow and is clunky on iPad.
+- ~~**Rename a slot.**~~ **Built 2026-09-15**, along with renaming a pack — see
+  Naming below. It landed exactly as predicted here: a separate later gesture, not
+  a prompt at store time.
 
 ### Phase 2 — steps — BUILT 2026-09-13
 
@@ -339,22 +338,80 @@ re-arranged — so the shipped vocabulary was thinner than it looked.
 
 #### Still open after authoring
 
-- **Naming.** Packs come out `Pack 1` / `Weave*`, slots auto-name to `33x66x7`.
-  A rename needs a text input, which this repo has never had — a genuinely new UI
-  primitive, and the design already rejected prompting at store time (interrupts
-  play→capture, clunky on iPad). So it has to be a separate gesture on something
-  you've already made.
+- ~~**Naming.**~~ **Built 2026-09-15** — see Naming below.
 - **Reordering slots.** Can't move pad 5 to pad 1. Cheap as a swap-two gesture,
   fiddly as drag. Matters more than it looks because scripts address slots by
   index, so today reordering means rewriting the script instead.
 - **Deleting a pack.** Forks still accumulate in the `B` cycle with no way to drop
   one — empty ones now evaporate on their own, but a pack with a single stray pad
-  in it is permanent.
+  in it is permanent. This is the one action that wants a confirm dialog, and
+  `SS.textInput` already proved out the modal plumbing it would reuse.
 - **More vocabulary, not more tooling.** The reason the built-in packs are
   re-arrangements is that there are only ten presets to arrange. A randomize /
   mutate gesture — roll a config, audition it, `S` it if it's good — attacks the
   same complaint from the other end, and is how you'd actually *find* six presets
   worth making a pack out of. Probably the highest-value thing left on this list.
+
+### Naming, and the shared modal — BUILT 2026-09-15
+
+chrismo's framing: *"what if we expanded the UI library here with (a) dialogs for
+yes/no sure checks and (b) text input for the new names of the pack and/or
+presets?"* Both are right; only (b) got built, and the reason (a) didn't is worth
+keeping.
+
+**`SS.textInput` in `panel.js`** — a DOM prompt returning a Promise, shared
+across sketches. Never the native `prompt()`: it blocks the p5 draw loop dead,
+looks like 1998 on an iPad, and freezes headless automation.
+
+The thing that looked like it would be hard wasn't. **All three sketches already
+begin their keydown handler with `if (e.target instanceof HTMLInputElement)
+return`**, so a real `<input>` never had its keystrokes eaten by the sketch —
+verified before building anything. `SS.modalOpen()` was added for the case that
+guard *can't* cover: a dialog with no text field, where a bare `b` would reach the
+sketch behind it. petri-dish checks it today even though nothing yet needs it, so
+the confirm dialog needs no sketch change when it lands.
+
+#### Where a yes/no dialog belongs, and where it would be a regression
+
+Not on store or clear. **Arm-then-pick was chosen over confirmation on purpose**
+(see Settled while building, above) — identical under a finger and a mouse, no
+modal interrupting play→capture, and the armed state visible in the pill row.
+Replacing that with a dialog would undo a decision, not improve on one.
+
+Not on `N` either, and this is the load-bearing part: **`N` isn't destructive.**
+Confirming a harmless action trains the reflex to dismiss the dialog, which spends
+the confirm's credibility on the one action that will eventually need it. `N` got
+fixed the cheap way instead (below).
+
+Which leaves a clean rule, and exactly one action that satisfies it today:
+
+| shape | gesture |
+| ----- | ------- |
+| has a target to pick, destructive | **arm-then-pick** — store, clear |
+| no second half, irreversible | **confirm dialog** — *delete a pack*, which doesn't exist yet |
+
+So the dialog work pays for itself by *unlocking* delete-pack, not by gating what
+already works. Still unbuilt, and that's the next natural use of `SS.modalOpen()`.
+
+#### Decided while building
+
+- **Rename is a click on the value, not a key and not an arm.** No new keybinding
+  (every free key is a key that can be hit by accident), and it keeps arming
+  meaning "something destructive is about to happen".
+- **Renaming forks a built-in**, same forced reason storing does: `shareUrl()`
+  emits `?pack=weave` for a built-in, so the new name would be gone from the very
+  URL meant to reproduce it.
+- **`forkPack` shallow-copies, so a fork shares preset *objects* with its
+  built-in.** Renaming a slot therefore has to replace the object, never mutate
+  it — otherwise renaming a fork's slot 1 silently renames Weave's Cobweb, and
+  `CLASSIC` with it. Explicitly verified rather than assumed.
+- **The sanitizer runs per keystroke, not on submit.** `; : @ / ,` hold the
+  `?packs=` spec together; `encodePack` already replaced them with spaces, which
+  meant discovering the mangling later in a pasted URL. Refusing them at the
+  keyboard, with a warning line, makes the constraint visible at the moment it
+  applies.
+- **Escape is bound in the capture phase**, so the modal gets it before
+  petri-dish's own Escape-disarms-the-pill-row binding.
 
 ### The N fix — BUILT 2026-09-15
 

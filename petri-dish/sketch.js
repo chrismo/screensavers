@@ -287,6 +287,10 @@ const PANEL_CSS = `
     font-size: 12px; color: #ccc; text-align: center; white-space: nowrap; line-height: 1;
   }
   .kbd-desc { color: #aaa; font-size: 11px; }
+  /* A name you can click to change. Underlined on hover rather than made to look
+     like a button — the row still has to read as a readout first. */
+  .val.nameable { cursor: pointer; }
+  .val.nameable:hover { text-decoration: underline dotted rgba(156, 204, 255, 0.6); text-underline-offset: 3px; }
   /* The two script toggles read as state, not just as actions: they show what
      the SELECTED step currently is, so the pair doubles as a readout. */
   #btn-stepKind, #btn-stepReset { min-width: 1.4rem; }
@@ -393,7 +397,8 @@ const PANEL_HTML = `
       <h2>mode</h2>
       <div class="row wide"><span class="label">mode</span><span id="v-mode" class="val accent"></span></div>
       ${paramRow('pack', 'pack', 'B \u21e7B')}
-      <div class="row wide"><span class="label">preset</span><span id="v-preset" class="val accent"></span></div>
+      <div class="row wide"><span class="label">preset</span><span id="v-preset"
+        class="val accent nameable" data-action="renamePreset" title="click to rename this slot"></span></div>
       <div id="v-preset-pills" class="preset-pills"></div>
 
       <h2>timing</h2>
@@ -991,6 +996,63 @@ function editablePack() {
 
 const setSlots = (pk, slots) => { pk.presets = slots; presets = slots; };
 
+// --- renaming -------------------------------------------------------------
+// Click the pack or preset value in the panel. Not a key and not an arm-then-pick
+// gesture: arming exists for *destructive* actions that need a target, and
+// diluting it with a harmless one would cost the thing that makes it read as a
+// warning. The design also rejected prompting at store time — it interrupts the
+// play→capture flow — so renaming is always a separate act on something that
+// already exists.
+//
+// Both rename paths fork a built-in first, the same forced reason storing does:
+// shareUrl() emits `?pack=weave` for a built-in, so the new name would be gone
+// from the very URL meant to reproduce it.
+const NAME_MAX = 24;
+// The ?packs= spec is held together by these, so a name can't contain one.
+// encodePack already replaces them with spaces; refusing them at the keyboard
+// means you see that happen instead of discovering it in a pasted URL.
+const nameSanitize = (v) => v.replace(/[;:@/,]/g, '');
+const NAME_NOTE = 'used in the URL — ; : @ / , are not allowed';
+
+function renamePack() {
+  const pk = packs[packIdx];
+  window.SS.textInput({
+    title: `Rename pack "${pk.name}"`,
+    value: pk.name, maxLength: NAME_MAX, confirmLabel: 'Rename',
+    sanitize: nameSanitize, note: NAME_NOTE,
+    rejectNote: 'that character separates fields in the URL',
+  }).then((name) => {
+    if (!name || name === pk.name) return;
+    const target = editablePack(); // forks a built-in before touching its name
+    target.name = name;
+    syncUrl();
+    window.flashToast?.(`pack: ${name}`);
+  });
+}
+
+function renamePreset() {
+  const i = presetIdx;
+  const p = presets[i];
+  if (!p) { window.flashToast?.(`slot ${slotLabel(i)} is empty`); return; }
+  window.SS.textInput({
+    title: `Rename slot ${slotLabel(i)} "${p.name}"`,
+    value: p.name, maxLength: NAME_MAX, confirmLabel: 'Rename',
+    sanitize: nameSanitize, note: NAME_NOTE,
+    rejectNote: 'that character separates fields in the URL',
+  }).then((name) => {
+    if (!name || name === p.name) return;
+    const pk = editablePack();
+    // editablePack may have handed back a fork, so re-read the slot from it
+    // rather than renaming the built-in's preset object in place.
+    const slot = pk.presets[i];
+    if (!slot) return;
+    setSlots(pk, pk.presets.slice());
+    presets[i] = Object.assign({}, slot, { name });
+    syncUrl();
+    window.flashToast?.(`slot ${slotLabel(i)}: ${name}`);
+  });
+}
+
 // Store the live config into a slot. This is the capture affordance: play, tune,
 // S, pick. Values are read live, so storing mid-lerp captures the transient —
 // which is the point, since the interesting moments are often a few seconds
@@ -1167,6 +1229,7 @@ function slotFromKey(e) {
 // reset 30×/sec.
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
+  if (window.SS.modalOpen?.()) return; // a dialog with no text field still owns the keyboard
   if (e.metaKey || e.ctrlKey || e.altKey) return; // let Cmd+R, Cmd+L, etc. through
   const isAdjust = (
     e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
@@ -1224,6 +1287,10 @@ function setupDom() {
   dom.stepTiming   = document.getElementById('v-stepTiming');
   dom.mode         = document.getElementById('v-mode');
   dom.pack         = document.getElementById('v-pack');
+  // paramRow doesn't take extra classes, so the pack value is made clickable here.
+  dom.pack.classList.add('nameable');
+  dom.pack.dataset.action = 'renamePack';
+  dom.pack.title = 'click to rename this pack';
   dom.preset       = document.getElementById('v-preset');
   dom.presetPills  = document.getElementById('v-preset-pills');
   dom.sel          = document.getElementById('v-sel');
@@ -1267,6 +1334,8 @@ function setupDom() {
     else if (a === 'stepAdd')    addStep();
     else if (a === 'stepDel')    dropStep();
     else if (a === 'stepLoop')   toggleStepLoop();
+    else if (a === 'renamePack')   renamePack();
+    else if (a === 'renamePreset') renamePreset();
     else if (a === 'reset')      resetMolds();
     else if (a === 'copy')       copyShareUrl();
     else if (a === 'fullscreen') window.toggleFullscreen?.();
