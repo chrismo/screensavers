@@ -14,7 +14,7 @@ import T from './timeline.js';
 const {
   SLOT_COUNT, EASINGS, DEFAULT_EASE,
   firstFilled, nextFilled, filledCount,
-  storeSlot, clearSlot, autoName, forkPack,
+  storeSlot, clearSlot, autoName, forkPack, newPack, packInsertAt, leavePack,
   parsePack, encodePack, compactQuery,
   legEase,
   DEFAULT_STEP_DUR, parseScript, encodeScript, stepSeconds, scriptLength, stepAt, stepStart, findStepForSlot, scriptFromPack,
@@ -677,4 +677,104 @@ test('an edited script still round-trips through the URL codec', () => {
   const shape = (x) => x.steps.map((st) => [st.slot, st.cut, st.reset, stepSeconds(st), st.ease]);
   assert.deepEqual(shape(parseScript(spec)), shape(sc));
   assert.equal(parseScript(spec).loopFrom, sc.loopFrom);
+});
+
+// --- authoring a pack from scratch ----------------------------------------
+// Forking gives you someone else's bank to edit. An empty one is the other
+// starting point: ten outlined pads and nothing in them.
+
+test('newPack is empty, custom, and named by the first free number', () => {
+  const pk = newPack([]);
+  assert.deepEqual(pk.presets, []);
+  assert.equal(pk.custom, true, 'custom from birth — nothing to fork from');
+  assert.equal(pk.name, 'Pack 1');
+});
+
+test('newPack does not reuse a name already taken', () => {
+  assert.equal(newPack(['Pack 1']).name, 'Pack 2');
+  assert.equal(newPack(['Pack 1', 'Pack 2', 'Weave']).name, 'Pack 3');
+  assert.equal(newPack(['Pack 2']).name, 'Pack 1', 'it fills the gap rather than counting past it');
+});
+
+test('an empty pack tolerates everything the bank helpers do to it', () => {
+  // it is live the moment it is made, so every read of it has to survive empty
+  const pk = newPack([]);
+  assert.equal(firstFilled(pk.presets, 0), -1);
+  assert.equal(nextFilled(pk.presets, 0), -1);
+  assert.equal(filledCount(pk.presets), 0);
+  assert.equal(scriptFromPack(pk.presets, 8), null, 'nothing to play yet');
+  assert.equal(encodePack(pk), '');
+});
+
+test('storing into an empty pack pads the hole in front of the slot', () => {
+  const pk = newPack([]);
+  const slots = storeSlot(pk.presets, 3, { rotAngle: 1, sensorAngle: 2, sensorDist: 3, moldSpeed: 4, bgFade: 5 }, []);
+  assert.equal(slots.length, 4);
+  assert.deepEqual(slots.slice(0, 3), [null, null, null]);
+  assert.equal(slots[3].name, '1x2x3');
+  assert.equal(encodePack({ presets: slots }), ';;;1x2x3:1,2,3,4,5');
+});
+
+// --- leaving a pack -------------------------------------------------------
+// A new pack goes in beside the one you were on, not at the end of the list, so
+// ⇧B actually walks back to where you came from. And an empty custom pack you
+// leave is dropped: it carries no information, the same argument that trims
+// trailing holes off a bank. Together those make a stray N cost one keystroke
+// and leave no residue.
+
+const PK = (name, filled, custom) => ({
+  name, custom: !!custom,
+  presets: Array.from({ length: filled }, (_, i) => P(`p${i}`, 1, 2, 3)),
+});
+const BANK = [PK('Classic', 10), PK('Weave', 5), PK('Bloom', 5)];
+
+test('packInsertAt puts a new pack directly after the current one', () => {
+  assert.equal(packInsertAt(1, 3), 2);
+  assert.equal(packInsertAt(0, 3), 1);
+  assert.equal(packInsertAt(2, 3), 3, 'last slot is the end of the list');
+});
+
+test('packInsertAt survives an index outside the list', () => {
+  assert.equal(packInsertAt(-5, 3), 0);
+  assert.equal(packInsertAt(99, 3), 3);
+});
+
+test('leavePack drops an empty custom pack behind you', () => {
+  const list = [BANK[0], BANK[1], PK('Pack 1', 0, true), BANK[2]];
+  // ⇧B from the new pack back to Weave: dropped, and Weave keeps its index
+  assert.deepEqual(leavePack(list, 2, 1), { drop: true, index: 1 });
+  // B forward to Bloom: dropped, and Bloom slides down one to take its place
+  assert.deepEqual(leavePack(list, 2, 3), { drop: true, index: 2 });
+});
+
+test('leavePack keeps a pack that has anything in it', () => {
+  const list = [BANK[0], PK('Pack 1', 1, true), BANK[2]];
+  assert.deepEqual(leavePack(list, 1, 0), { drop: false, index: 0 }, 'one stored pad is worth keeping');
+});
+
+test('leavePack never drops a built-in, however empty', () => {
+  const list = [BANK[0], PK('Hollow', 0, false), BANK[2]];
+  assert.deepEqual(leavePack(list, 1, 2), { drop: false, index: 2 });
+});
+
+test('leavePack does not drop the pack you are staying on', () => {
+  const list = [BANK[0], PK('Pack 1', 0, true)];
+  assert.deepEqual(leavePack(list, 1, 1), { drop: false, index: 1 });
+});
+
+test('leavePack never empties the pack list', () => {
+  assert.deepEqual(leavePack([PK('Pack 1', 0, true)], 0, 0), { drop: false, index: 0 });
+});
+
+test('a stray N round-trips to exactly where it started', () => {
+  // the whole point, end to end: on Weave, press N, press ⇧B
+  const list = BANK.slice();
+  const at = packInsertAt(1, list.length);
+  list.splice(at, 0, newPack(list.map((p) => p.name)));
+  assert.deepEqual(list.map((p) => p.name), ['Classic', 'Weave', 'Pack 1', 'Bloom']);
+  const back = leavePack(list, at, at - 1);
+  assert.equal(back.drop, true);
+  list.splice(at, 1);
+  assert.deepEqual(list.map((p) => p.name), ['Classic', 'Weave', 'Bloom'], 'no residue');
+  assert.equal(list[back.index].name, 'Weave', 'and you are back where you were');
 });

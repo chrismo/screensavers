@@ -106,6 +106,34 @@ function forkPack(pk, takenNames) {
   return { name, presets: pk.presets.slice(), custom: true };
 }
 
+// An empty bank to author into. Forking hands you someone else's presets to
+// edit; this is the other starting point — ten outlined pads and nothing on
+// them. Custom from birth, because there is no built-in behind it to protect.
+function newPack(takenNames) {
+  const taken = new Set(takenNames || []);
+  let n = 1;
+  while (taken.has(`Pack ${n}`)) n += 1;
+  return { name: `Pack ${n}`, presets: [], custom: true };
+}
+
+// Where a new pack goes: directly after the one you're on, never at the end of
+// the list. Pushing to the end made ⇧B walk to whatever happened to be last
+// rather than back to where you came from, which is what made a stray N feel
+// like it had eaten your pack.
+const packInsertAt = (i, len) => Math.max(0, Math.min(len, i + 1));
+
+// Leaving pack `from` for pack `to`. An empty custom pack you're walking away
+// from carries no information — the same argument that trims trailing holes off
+// a bank — so it's dropped, and a stray N leaves no residue in the B cycle.
+// Built-ins are never dropped however empty, since they're the fixed vocabulary.
+// Returns whether to splice `from` out, and where `to` lands once you have.
+function leavePack(list, from, to) {
+  const pk = list[from];
+  const drop = !!(pk && pk.custom && filledCount(pk.presets) === 0 &&
+                  from !== to && list.length > 1);
+  return { drop, index: drop && to > from ? to - 1 : to };
+}
+
 // --- ?packs= spec: parse / encode -----------------------------------------
 //   spec   := slot (';' slot)*
 //   slot   := '' | [name ':'] rot ',' sensA ',' sensD ',' speed ',' fade ['@' timing]
@@ -459,7 +487,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     SLOT_COUNT, EASINGS, DEFAULT_EASE, PARAMS, TIMING,
     filledCount, firstFilled, nextFilled, trimHoles,
-    storeSlot, clearSlot, autoName, forkPack,
+    storeSlot, clearSlot, autoName, forkPack, newPack, packInsertAt, leavePack,
     parsePack, parseSlot, encodePack, compactQuery,
     DEFAULT_STEP_DUR, parseScript, encodeScript, stepSeconds, scriptLength, stepAt, stepStart, findStepForSlot, scriptFromPack,
     segments, playheadFrac,

@@ -22,6 +22,7 @@ on the left edge to open the drawer.
 | `0`–`9`   | jump to slot 0–9 in the active pack |
 | `S` / `X` | arm store / clear, then press `0`–`9` (or tap a pill) |
 | `B` / `⇧B`| next / previous preset pack         |
+| `N`       | new empty pack (ten blank pads)     |
 | `D`       | toggle drift mode (perlin auto-morph) |
 | `L`       | play / stop the script               |
 | `R`       | reset molds (re-seed at center, clear canvas) |
@@ -78,7 +79,28 @@ Timing is the pack's rhythm and the slot is a position in it — you're replacin
 what sits there, not how the pack moves. Names are derived from the params
 (`33x66x7`), or from a base preset when all five match it exactly.
 
-There is no save button: the URL is the save format. Press `C`.
+### Authoring a pack from scratch
+
+`N` makes a new empty pack — ten outlined pads and nothing on them — and selects
+it. Whatever config is on screen stays on screen, so it's ready to be the thing
+you store into pad 1. From there it's the same loop: tune, `S`, pick a pad.
+
+`N` is non-destructive — it creates a pack, it doesn't clear one. The pads go
+blank because you're looking at a *different* pack, not an emptied one. Two
+things make a stray press free rather than merely survivable:
+
+- **The new pack lands beside the one you were on**, not at the end of the list,
+  so `⇧B` actually walks back to where you came from.
+- **An empty pack drops itself when you leave it.** It holds nothing, so there's
+  nothing to come back for — the same argument that trims trailing holes off a
+  bank. Press `N` by mistake, press `⇧B`, and there's no residue in the `B` cycle.
+
+Store one pad and it stops being disposable. Pressing `N` while already on an
+empty pack does nothing.
+
+Forking (the first edit to a built-in) and `N` are the two starting points, and
+they're for different things: forking gives you someone else's palette to vary,
+`N` gives you a blank one.
 
 ## Packs
 
@@ -264,6 +286,7 @@ table below is for hand-rolling.
 | `?preset=N`      | start on slot N (0–9), within the active pack       |
 | `?script=SPEC`   | choreography over the slots (see Scripts)           |
 | `?lerp=1`        | start playback on the pack's own default script     |
+| `?lerp=0`        | explicitly *not* playing — what the address bar writes when you've authored a script but stopped. A bare `?script=` with no `lerp` still autoplays |
 | `?rate=N`        | playback speed multiplier (default 1; `0.5` is half speed) |
 | `?drift=1`       | start in drift mode (perlin auto-morph)             |
 | `?nopanel=1`     | hide the control drawer (recommended for screensaver) |
@@ -275,6 +298,9 @@ table below is for hand-rolling.
 | `?num=N`         | mold count (default 4000)                           |
 | `?lerpDuration=N`| legacy alias for `?rate=` (`480 / N`)               |
 | `?driftSpeed=N`  | perlin step per frame (default 0.003)               |
+
+`?script=` now rides in the URL whether or not playback is running — it's
+authored content, not a mode — which is why `?lerp=0` exists to say the mode part.
 
 `lerp` wins over `drift` if both passed. Runtime overrides
 (`rotAngle`–`bgFade`) only stick in manual mode — drift and lerp

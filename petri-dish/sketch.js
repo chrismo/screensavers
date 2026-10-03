@@ -419,6 +419,7 @@ const PANEL_HTML = `
       <h2>actions</h2>
       <div class="legend">
         <button class="kbd kbd-action" data-action="pack">B</button><div class="kbd-desc">next pack (⇧B back)</div>
+        <button class="kbd kbd-action" data-action="newpack">N</button><div class="kbd-desc">new empty pack</div>
         <button class="kbd kbd-action" data-action="drift">D</button><div class="kbd-desc">drift (perlin)</div>
         <button class="kbd kbd-action" data-action="lerp">L</button><div class="kbd-desc">play / stop the script</div>
         <span class="kbd-pair"><button class="kbd-btn kbd-action" data-action="store">S</button><button
@@ -557,7 +558,13 @@ function applyUrlParams(params) {
     if (sc) { script = sc; scriptCustom = true; }
   }
 
-  if (params.get('lerp') === '1' || params.get('play') === '1' || scriptCustom) {
+  // `?lerp=0` is the address bar saying "script authored, not playing". Anything
+  // else keeps the old rule: a bare ?script= autoplays, because that's what every
+  // link written before the address bar went live relies on.
+  const lerpParam = params.get('lerp');
+  if (lerpParam === '0') {
+    playing = false;
+  } else if (lerpParam === '1' || params.get('play') === '1' || scriptCustom) {
     playing = true;
     restartScript();
   } else if (params.get('drift') === '1') {
@@ -568,6 +575,8 @@ function applyUrlParams(params) {
     buildPanel();
     setupDom();
   }
+
+  urlSyncReady = true;
 }
 
 function draw() {
@@ -671,18 +680,48 @@ function applyLerp(a, b, t, ease) {
 // the 0-9 keys / pills and restarts at the new pack's first preset.
 function setPack(i, announce) {
   const n = packs.length;
-  packIdx = ((i % n) + n) % n;
+  const want = ((i % n) + n) % n;
+  // Walking away from an empty custom pack drops it. It holds nothing, so there
+  // is nothing to come back for, and a stray N shouldn't wedge a dead entry in
+  // the B cycle forever with no way to remove it.
+  const leave = leavePack(packs, packIdx, want);
+  if (leave.drop) packs.splice(packIdx, 1);
+  packIdx = leave.index;
   presets = packs[packIdx].presets;
   const start = Math.max(0, firstFilled(presets, 0)); // a pack can lead with holes
   applyPreset(start);
   presetIdx = start;
   rebuildScript();
   rebuildPresetPills();
+  syncUrl();
   if (announce) window.flashToast?.(`pack: ${packs[packIdx].name}`);
 }
 
 function cyclePack(dir) {
   setPack(packIdx + (dir < 0 ? -1 : 1), true);
+}
+
+// Author a pack from scratch. Forking (the first edit to a built-in) hands you
+// someone else's five presets to edit around; this is the other starting point.
+// Non-destructive: the pack you were on is still in the B cycle, untouched.
+//
+// The live config is deliberately left alone — setPack's applyPreset no-ops on
+// an empty bank — so whatever is on screen when you press N is still there,
+// ready to be the thing you store into slot 1.
+function newEmptyPack() {
+  // Already standing on a blank one — making a second would just leave the first
+  // to be garbage-collected by setPack, under a confusingly bumped name.
+  const here = packs[packIdx];
+  if (here.custom && filledCount(here.presets) === 0) {
+    window.flashToast?.(`${here.name} is already empty`);
+    return;
+  }
+  // Beside the current pack, not at the end of the list, so ⇧B walks back to
+  // where you came from — and the pack left behind evaporates on the way out.
+  const at = packInsertAt(packIdx, packs.length);
+  packs.splice(at, 0, newPack(packs.map((pk) => pk.name)));
+  setPack(at);
+  window.flashToast?.(`${packs[packIdx].name} — empty · S to fill a pad, ⇧B to go back`);
 }
 
 // Re-derive the pack's default script. A hand-written ?script= wins and is left
@@ -737,6 +776,7 @@ function editScript(fn, selectIdx) {
   if (!next || next === script) return;
   script = next;
   scriptCustom = true;
+  syncUrl();
   selStep = constrain(selectIdx == null ? selStep : selectIdx, 0, script.steps.length - 1);
   stepIdx = -1; // durations may have moved under the playhead; re-enter the step
 }
@@ -844,6 +884,7 @@ function adjustParam(name, dir) {
   else if (name === 'rate')         rate         = dir < 0 ? max(rateStep, rate - rateStep) : rate + rateStep;
   else if (name === 'driftSpeed')   driftSpeed   = dir < 0 ? max(0.0005, driftSpeed - driftSpeedStep) : driftSpeed + driftSpeedStep;
   toastParam(name);
+  syncUrl();
 }
 
 function toastParam(name) {
@@ -871,6 +912,7 @@ function toastParam(name) {
 function toggleDrift() {
   drift = !drift;
   if (drift) playing = false;
+  syncUrl();
   window.flashToast?.(`drift ${drift ? 'on' : 'off'}`);
 }
 
@@ -882,6 +924,7 @@ function togglePlay() {
     restartScript();
     if (!seekToSlot(presetIdx)) restartScript();
   }
+  syncUrl();
   const n = script ? script.steps.length : 0;
   window.flashToast?.(playing ? `play ${n} step${n === 1 ? '' : 's'}` : 'play off');
 }
@@ -905,6 +948,7 @@ function pickPreset(i) {
   if (!presets[i]) { window.flashToast?.(`slot ${slotLabel(i)} empty`); return; }
   applyPreset(i);
   if (playing) seekToSlot(i);
+  syncUrl();
   window.flashToast?.(`preset ${slotLabel(i)}: ${presets[i].name}`);
 }
 
@@ -960,6 +1004,7 @@ function storeIntoSlot(i) {
   rebuildScript();
   rebuildPresetPills();
   flashPill(i);
+  syncUrl();
   window.flashToast?.(`slot ${slotLabel(i)} = ${presets[i].name}` + (forking ? ` · forked to ${pk.name}` : ''));
 }
 
@@ -975,6 +1020,7 @@ function clearSlotAt(i) {
   rebuildScript();
   rebuildPresetPills();
   flashPill(i);
+  syncUrl();
   window.flashToast?.(`slot ${slotLabel(i)} cleared (${was})` + (forking ? ` · forked to ${pk.name}` : ''));
 }
 
@@ -995,35 +1041,54 @@ function flashPill(i) {
 
 // Build a screensaver-friendly URL that reproduces the current panel state.
 // Only emits params that differ from preset defaults — keeps the URL readable.
-function shareUrl() {
+// `screensaver` true (what C copies) always asserts ?nopanel=1. False (what the
+// address bar carries) reflects the session you're actually in, so a reload puts
+// the panel back exactly as you had it.
+function shareUrl(screensaver) {
   const close = (a, b) => Math.abs(a - b) < 1e-6;
   // Round through toFixed → Number to drop FP noise and trailing zeros.
   const fmt = (n, d) => Number(n.toFixed(d)).toString();
 
   const params = new URLSearchParams();
-  params.set('nopanel', '1');
+  if (screensaver || !dom.rotAngle) params.set('nopanel', '1');
 
   // Packs are navigation, but the 0-9 slots have to mean the same thing on the
   // other end for ?preset= to land — so the pack rides along too. An ad-hoc
   // ?packs= pack is re-emitted in full, since there's nothing to name it by.
   const pk = packs[packIdx];
-  if (pk.custom) {
-    params.set('packs', encodePack(pk));
+  const spec = pk.custom ? encodePack(pk) : '';
+  if (spec) {
+    params.set('packs', spec);
     if (pk.name !== 'Custom') params.set('packname', pk.name);
+  } else if (pk.custom) {
+    // A brand-new empty pack has nothing to encode, and `packs=` empty parses
+    // back to null — which would land the reload on Classic while the URL still
+    // claimed the name. Say nothing instead of saying something false. The name
+    // reappears with the first stored slot, which is the first thing worth
+    // reproducing anyway.
   } else if (packIdx !== 0) {
     params.set('pack', packSlug(pk.name));
   }
 
   params.set('preset', String(presetIdx));
 
+  // A hand-written or edited script is authored content, not a mode: it rides
+  // along whether or not it happens to be playing right now. (A derived script is
+  // just the pack's own timing, which ?pack= / ?packs= already carries.) Before
+  // the address bar went live these were fused, so a script you edited while
+  // stopped never reached the URL at all.
+  if (scriptCustom && script) params.set('script', encodeScript(script));
+
   if (playing) {
-    // A hand-written script has to ride along in full; a derived one is just the
-    // pack's own timing, which ?pack= / ?packs= already carries.
-    if (scriptCustom && script) params.set('script', encodeScript(script));
-    else params.set('lerp', '1');
+    if (!scriptCustom) params.set('lerp', '1');
   } else if (drift) {
+    // An explicit off, so a reload doesn't autoplay a script you were editing
+    // with playback stopped. Bare `?script=` with no mode still autoplays —
+    // that's what every link written before this did, and it stays true.
+    if (scriptCustom && script) params.set('lerp', '0');
     params.set('drift', '1');
   } else {
+    if (scriptCustom && script) params.set('lerp', '0');
     // Manual mode — emit any of the 5 runtime vars that differ from the
     // preset's value. In drift/lerp those vars get rewritten every frame,
     // so a snapshot would be misleading. With presetIdx on an empty slot
@@ -1046,9 +1111,37 @@ function shareUrl() {
   return url.toString();
 }
 
+// --- the address bar as the save format -----------------------------------
+// The URL has always been this sketch's only save format, but until now the
+// address bar didn't know that: C wrote to the clipboard and nothing else, so
+// ⌘R reloaded whatever you arrived with and everything you'd authored was gone.
+// Keeping the bar in sync doesn't add a second place state can live — it makes
+// the one place honest. ⌘R reproduces what's on screen, ⌘D bookmarks your pack,
+// and "keep the URL" stops being a thing you have to remember to do.
+//
+// replaceState, not pushState: an entry per keystroke would flood history, and
+// Back-as-undo would need a popstate handler re-entering applyUrlParams, which
+// is a different feature. Verified working on file:// as well as http://, which
+// matters because double-click is this repo's loading convention.
+//
+// Debounced rather than immediate: adjustParam auto-repeats at 16/sec under a
+// held key, and rewriting the address bar that fast churns it for no gain. 400ms
+// is far below the time it takes to reach for ⌘R.
+let urlSyncTimer;
+let urlSyncReady = false; // nothing to mirror until the initial URL is applied
+const URL_SYNC_DELAY = 400;
+
+function syncUrl() {
+  if (!urlSyncReady || !window.history?.replaceState) return;
+  clearTimeout(urlSyncTimer);
+  urlSyncTimer = setTimeout(() => {
+    try { history.replaceState(null, '', shareUrl(false)); } catch (e) { /* opaque origin */ }
+  }, URL_SYNC_DELAY);
+}
+
 function copyShareUrl() {
   if (!navigator.clipboard) return;
-  navigator.clipboard.writeText(shareUrl()).then(() => {
+  navigator.clipboard.writeText(shareUrl(true)).then(() => {
     const desc = document.getElementById('copy-desc');
     if (!desc) return;
     const orig = desc.textContent;
@@ -1095,6 +1188,9 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === '.')          adjustParam('bgFade', +1);
   else if (e.key === 'b') cyclePack(+1);
   else if (e.key === 'B') cyclePack(-1); // shift-B walks back
+  // N is non-destructive: the pack you were on is still in the B cycle, so a
+  // mistaken press costs one keystroke to undo.
+  else if (e.key === 'n' || e.key === 'N') newEmptyPack();
   else if (e.key === 'd' || e.key === 'D') toggleDrift();
   else if (e.key === 'l' || e.key === 'L') togglePlay();
   else if (e.key === 'r' || e.key === 'R') resetMolds();
@@ -1161,6 +1257,7 @@ function setupDom() {
     if (!el) return;
     const a = el.dataset.action;
     if      (a === 'pack')       cyclePack(+1);
+    else if (a === 'newpack')    newEmptyPack();
     else if (a === 'drift')      toggleDrift();
     else if (a === 'lerp')       togglePlay();
     else if (a === 'store')      arm('store');

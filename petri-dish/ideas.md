@@ -131,6 +131,21 @@ palette you liked becomes impossible.
   Adding `localStorage` would be the project's first hidden state. Revisit only
   if work actually gets lost.
 
+  **Revisited 2026-09-15, and held — but the leak was real and got fixed
+  differently.** Work *was* getting lost, and the cause wasn't the missing
+  storage API: `C` wrote to the clipboard and nothing touched the address bar, so
+  ⌘R reloaded whatever you arrived with. The URL was the save format in principle
+  and a thing you had to remember to copy in practice. `history.replaceState` on
+  every structural edit closes that without adding a second place state can live.
+
+  The argument that settled it: **`localStorage` doesn't solve transport at all.**
+  With it you would still press `C` to get a pack onto the iPad; it only stops you
+  losing work in one browser. The live address bar does both with one mechanism
+  and no new concept. Storage stays deferred until the want is a *library* —
+  several packs switched between without managing bookmarks — which is a different
+  feature from "don't lose my work" and much easier to design after authoring a
+  few packs for real.
+
 #### Settled while building
 
 - **Clear gesture: arm, then pick** — the lean, as designed. `X` (button or key)
@@ -278,6 +293,90 @@ interesting as a display.
   the session. It can't survive the URL — a cut has nowhere to write the number —
   which the round-trip test asserts explicitly rather than leaving to be
   discovered.
+
+### Authoring — BUILT 2026-09-15
+
+The gap this closed, in chrismo's words: *"what I CAN'T do yet is make a pack
+myself from scratch."* Half-true and worth separating, because it changed what
+got built. Authoring a **preset** already worked — tune, `S`, pick a pad, and the
+result is genuinely yours. Authoring a **pack** did not: every custom pack began
+as a fork of someone else's five-to-ten filled slots, so "from scratch" meant
+forking Classic and pressing `X`+slot ten times. And the four built-in packs
+other than Tide are `tune(name, timing)` — the same ten CLASSIC presets
+re-arranged — so the shipped vocabulary was thinner than it looked.
+
+- ✅ **`N` — a new empty pack.** Ten blank pads, custom from birth, selected
+  immediately. The live config is deliberately untouched (setPack's `applyPreset`
+  no-ops on an empty bank), so whatever is on screen when you press `N` is still
+  there, ready to be pad 1. Non-destructive: the old pack is still in the `B`
+  cycle.
+- ✅ **The address bar is kept in sync** with `shareUrl()` — see the revisited
+  storage note above for why this rather than `localStorage`.
+
+#### Decided while building the address-bar sync
+
+- **`shareUrl()` grew a `screensaver` argument.** `C` copies a link that always
+  asserts `?nopanel=1`; the address bar mirrors the session you're actually in, so
+  a reload puts the panel back as you had it. Fusing those two would have meant
+  ⌘R hiding your own drawer.
+- **A script is authored content, not a mode.** `?script=` used to be emitted only
+  while playing, which meant a script edited with playback stopped never reached
+  the URL at all — the exact thing the sync exists to prevent. Now the script
+  always rides along and `?lerp=0` carries the mode. A bare `?script=` with no
+  `lerp` still autoplays, so every link written before this keeps working.
+- **An empty pack encodes to nothing, so it says nothing.** `packs=` empty parses
+  back to `null`, which would land a reload on Classic while `packname=` still
+  claimed the name — the URL lying, which is what this whole change exists to
+  stop.
+- **`replaceState`, debounced ~400ms.** `pushState` would put an entry in history
+  per keystroke; the debounce is because `adjustParam` auto-repeats at 16/sec
+  under a held key. Verified working on `file://` as well as `http://` — that was
+  the real risk, since double-click is this repo's loading convention, and an
+  opaque origin blocks plenty of other things (see the `fetch` rejection above).
+- **Back is not undo.** `pushState` per store would have accidentally delivered
+  the parked undo item, but making it work needs a `popstate` handler re-entering
+  `applyUrlParams`, which isn't re-entrant. Noted as an idea, not built.
+
+#### Still open after authoring
+
+- **Naming.** Packs come out `Pack 1` / `Weave*`, slots auto-name to `33x66x7`.
+  A rename needs a text input, which this repo has never had — a genuinely new UI
+  primitive, and the design already rejected prompting at store time (interrupts
+  play→capture, clunky on iPad). So it has to be a separate gesture on something
+  you've already made.
+- **Reordering slots.** Can't move pad 5 to pad 1. Cheap as a swap-two gesture,
+  fiddly as drag. Matters more than it looks because scripts address slots by
+  index, so today reordering means rewriting the script instead.
+- **Deleting a pack.** Forks still accumulate in the `B` cycle with no way to drop
+  one — empty ones now evaporate on their own, but a pack with a single stray pad
+  in it is permanent.
+- **More vocabulary, not more tooling.** The reason the built-in packs are
+  re-arrangements is that there are only ten presets to arrange. A randomize /
+  mutate gesture — roll a config, audition it, `S` it if it's good — attacks the
+  same complaint from the other end, and is how you'd actually *find* six presets
+  worth making a pack out of. Probably the highest-value thing left on this list.
+
+### The N fix — BUILT 2026-09-15
+
+chrismo, on first use: *"N clears the whole pack? that's a bit dangerous?"* It
+doesn't clear anything — but the README claimed a mistaken press "costs one
+keystroke to undo", and **that was false**: the new pack was pushed onto the end
+of the list, so `⇧B` from it landed on whatever happened to be last (Tide), not on
+the pack you'd left. Measured. And stray presses accumulated `Pack 1`-`Pack 4`
+permanently in the `B` cycle with no way to drop one — the only genuinely
+irreversible consequence in the whole feature.
+
+Fixed by making the mistake free rather than making the action harder:
+
+- **`packInsertAt`** — a new pack lands directly after the current one, so `⇧B`
+  really does walk back.
+- **`leavePack`** — an empty *custom* pack is dropped when you walk away from it.
+  It carries no information, the same argument that trims trailing holes. Built-ins
+  are never dropped however empty, since they're the fixed vocabulary.
+- **`N` on an already-empty pack is a no-op**, so repeats can't stack.
+
+Net: stray `N` → `⇧B` → exactly where you were, zero residue. One stored pad makes
+the pack real and it stops being disposable.
 
 #### Still open after Phase 3
 
