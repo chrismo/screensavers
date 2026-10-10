@@ -11,7 +11,7 @@ sketch supports, e.g. `&lerp=1` for petri-dish).
 
 - [petri-dish/](petri-dish/) — interactive Physarum slime-mold
   simulation. See [petri-dish/README.md](petri-dish/README.md) for
-  controls, presets, and supported URL params.
+  controls, preset packs, and supported URL params.
   Live: https://chrismo.github.io/screensavers/petri-dish/
 - [knights/](knights/) — an interactive sandbox for the *Red & Black Knights*
   spiral graph-coloring (after Numberphile): replays the actual turn-based solve,
@@ -39,6 +39,8 @@ best; WebViewScreenSaver still works on Tahoe but with rough edges).
 
 A quick canned petri-dish URL:
 `https://chrismo.github.io/screensavers/petri-dish/?nopanel=1&lerp=1`.
+Add `&pack=weave` (or `bloom` / `pulse` / `tide`) to cycle a different
+preset pack, each with its own transition timing.
 
 ## Licensing
 

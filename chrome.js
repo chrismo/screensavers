@@ -68,17 +68,26 @@
     else if (e.key === '?') flashHint();
   });
 
-  // Dev-only live reload: on localhost, poll the sketch's sketch.js (resolved
-  // relative to the page) and reload when it changes. Skipped on GitHub Pages.
+  // Dev-only live reload: on localhost, poll the sketch's scripts (resolved
+  // relative to the page) and reload when any of them changes. Skipped on GitHub
+  // Pages. A sketch split across more than one file opts its siblings in before
+  // this script loads — e.g. petri-dish/sketch.js:
+  //   window.SS_WATCH = ['timeline.js'];
+  // Polling a fixed union list instead would 404 in every sketch that lacks a
+  // given file, twice a second, in the same console these sketches are debugged in.
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    let last = null;
+    const watched = ['sketch.js'].concat(window.SS_WATCH || []);
+    const last = {};
     setInterval(async () => {
-      try {
-        const r = await fetch('sketch.js', { method: 'HEAD', cache: 'no-store' });
-        const m = r.headers.get('last-modified');
-        if (last && m && m !== last) location.reload();
-        if (m) last = m;
-      } catch (e) {}
+      for (const f of watched) {
+        try {
+          const r = await fetch(f, { method: 'HEAD', cache: 'no-store' });
+          const m = r.ok && r.headers.get('last-modified');
+          if (!m) continue;
+          if (last[f] && m !== last[f]) return location.reload();
+          last[f] = m;
+        } catch (e) {}
+      }
     }, 800);
   }
 
